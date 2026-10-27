@@ -22,9 +22,10 @@
     "db:seed": "tsx prisma/seed.ts",
     "db:studio": "prisma studio",
     "admin:create": "tsx scripts/create-platform-admin.ts",
-    "cron:tick": "tsx scripts/cron-tick.ts"
+    "cron:tick": "node --env-file-if-exists=.env --experimental-strip-types scripts/cron-tick.ts"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.1157.0",
     "@livekit/components-react": "^2.9.24",
     "@livekit/components-styles": "^1.2.0",
     "@prisma/client": "^6.19.3",

@@ -1,0 +1,1393 @@
+// Prayer Community Platform — relational schema.
+// Conventions:
+//   * Every tenant-owned table has `organizationId` (indexed, FK with cascade on org delete).
+//   * Money is stored as integer minor units (kobo, cents) with an ISO-4217 `currency`.
+//   * Timestamps are UTC. Recurring meetings additionally keep their IANA `timezone`.
+// See docs/DATABASE.md for ownership, retention and deletion rules.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------------------------------------------------------------------------------------------
+// Identity
+// ---------------------------------------------------------------------------------------------
+
+enum PlatformRole {
+  SUPER_ADMIN
+  SUPPORT
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  DELETED
+}
+
+model User {
+  id              String        @id @default(cuid())
+  email           String        @unique
+  emailVerifiedAt DateTime?
+  passwordHash    String?
+  name            String
+  displayName     String?
+  timezone        String        @default("UTC")
+  locale          String        @default("en")
+  avatarUrl       String?
+  platformRole    PlatformRole?
+  status          UserStatus    @default(ACTIVE)
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  deletedAt       DateTime?
+
+  sessions               Session[]
+  tokens                 AuthToken[]
+  memberships            Membership[]
+  groupMemberships       GroupMembership[]
+  invitationsSent        Invitation[]             @relation("InvitationInviter")
+  prayerRequests         PrayerRequest[]
+  prayerAssignments      PrayerRequestAssignment[]
+  prayerAcknowledgements PrayerAcknowledgement[]
+  prayerUpdates          PrayerRequestUpdate[]
+  testimonies            Testimony[]
+  notifications          Notification[]
+  notificationPrefs      NotificationPreference[]
+  donations              Donation[]
+  meetingHosts           MeetingHost[]
+  meetingInvites         MeetingInvitee[]
+  attendances            MeetingAttendance[]
+  joinIntents            MeetingJoinIntent[]
+  admissions             MeetingAdmission[]
+  roomBans               MeetingRoomBan[]
+  giftEvents             GiftEvent[]
+  enrollments            ProgrammeEnrollment[]
+  reports                ContentReport[]          @relation("ReportReporter")
+  supportRequests        SupportRequest[]
+  auditLogs              AuditLog[]
+}
+
+model Session {
+  id         String   @id // SHA-256 of the session token (hex)
+  userId     String
+  user       User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  lastSeenAt DateTime @default(now())
+  userAgent  String?
+  ipHash     String?
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+enum AuthTokenType {
+  EMAIL_VERIFICATION
+  PASSWORD_RESET
+}
+
+model AuthToken {
+  id        String        @id @default(cuid())
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  type      AuthTokenType
+  tokenHash String        @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime      @default(now())
+
+  @@index([userId, type])
+}
+
+model RateLimitBucket {
+  key         String
+  windowStart DateTime
+  count       Int      @default(0)
+
+  @@id([key, windowStart])
+  @@index([windowStart])
+}
+
+// ---------------------------------------------------------------------------------------------
+// Organisations, membership, roles
+// ---------------------------------------------------------------------------------------------
+
+enum OrgStatus {
+  ACTIVE
+  SUSPENDED
+  CLOSED
+}
+
+enum OrgVerification {
+  UNVERIFIED
+  PENDING
+  VERIFIED
+  REJECTED
+}
+
+enum OrgVisibility {
+  PUBLIC // listed and profile visible
+  UNLISTED // profile visible by link only
+  PRIVATE // profile visible to members only
+}
+
+enum JoinPolicy {
+  OPEN
+  APPROVAL
+  INVITE_ONLY
+}
+
+model Organization {
+  id                  String          @id @default(cuid())
+  slug                String          @unique
+  name                String
+  tagline             String?
+  description         String?
+  country             String // ISO-3166 alpha-2
+  timezone            String
+  language            String          @default("en")
+  defaultCurrency     String          @default("NGN")
+  contactEmail        String?
+  contactPhone        String?
+  websiteUrl          String?
+  socialLinks         Json?           @db.JsonB // { facebook, instagram, youtube, x } — display only
+  logoUrl             String?
+  coverUrl            String?
+  accentColor         String?
+  visibility          OrgVisibility   @default(PUBLIC)
+  joinPolicy          JoinPolicy      @default(APPROVAL)
+  status              OrgStatus       @default(ACTIVE)
+  verification        OrgVerification @default(UNVERIFIED)
+  suspendedReason     String?
+  // Community settings
+  allowAnonymousPrayer Boolean        @default(true)
+  moderateSharedPrayer Boolean        @default(true)
+  moderateTestimonies  Boolean        @default(true)
+  paidGiftsEnabled     Boolean        @default(false)
+  fundraisingEnabled   Boolean        @default(false)
+  termsAcceptedAt     DateTime
+  termsAcceptedById   String
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+
+  memberships        Membership[]
+  invitations        Invitation[]
+  groups             CommunityGroup[]
+  meetings           Meeting[]
+  occurrences        MeetingOccurrence[]
+  announcements      Announcement[]
+  prayerPoints       PrayerPoint[]
+  prayerRequests     PrayerRequest[]
+  testimonies        Testimony[]
+  programmes         Programme[]
+  notifications      Notification[]
+  campaigns          FundraisingCampaign[]
+  paymentConnections PaymentProviderConnection[]
+  donations          Donation[]
+  ledgerEntries      LedgerEntry[]
+  refunds            Refund[]
+  disputes           Dispute[]
+  settlements        SettlementRecord[]
+  gifts              VirtualGift[]
+  giftEvents         GiftEvent[]
+  subscription       Subscription?
+  invoices           SubscriptionInvoice[]
+  reports            ContentReport[]
+  supportRequests    SupportRequest[]
+  auditLogs          AuditLog[]
+  usageRecords       UsageRecord[]
+}
+
+enum OrgRole {
+  OWNER
+  ADMIN
+  MODERATOR
+  PRAYER_COORDINATOR
+  HOST
+  FINANCE_ADMIN
+  MEMBER
+}
+
+enum MembershipStatus {
+  PENDING // join request awaiting approval
+  ACTIVE
+  SUSPENDED
+  LEFT
+  REMOVED
+  REJECTED
+}
+
+model Membership {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  roles          OrgRole[]        @default([MEMBER])
+  status         MembershipStatus @default(ACTIVE)
+  joinMessage    String?
+  joinedAt       DateTime?
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+  @@index([organizationId, status])
+}
+
+model Invitation {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email          String
+  roles          OrgRole[]    @default([MEMBER])
+  groupIds       String[]     @default([])
+  tokenHash      String       @unique
+  invitedById    String
+  invitedBy      User         @relation("InvitationInviter", fields: [invitedById], references: [id])
+  expiresAt      DateTime
+  acceptedAt     DateTime?
+  acceptedById   String?
+  revokedAt      DateTime?
+  createdAt      DateTime     @default(now())
+
+  @@index([organizationId, email])
+}
+
+model CommunityGroup {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  description    String?
+  archivedAt     DateTime?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  members        GroupMembership[]
+  meetings       Meeting[]
+  announcements  Announcement[]
+  prayerRequests PrayerRequest[]
+  programmes     Programme[]
+
+  @@unique([organizationId, name])
+  @@index([organizationId])
+}
+
+enum GroupRole {
+  LEADER
+  MEMBER
+}
+
+model GroupMembership {
+  id             String         @id @default(cuid())
+  organizationId String
+  groupId        String
+  group          CommunityGroup @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           GroupRole      @default(MEMBER)
+  createdAt      DateTime       @default(now())
+
+  @@unique([groupId, userId])
+  @@index([organizationId, userId])
+}
+
+// ---------------------------------------------------------------------------------------------
+// Meetings
+// ---------------------------------------------------------------------------------------------
+
+enum MeetingMode {
+  WHATSAPP
+  AUDIO
+  VIDEO
+}
+
+enum MeetingFormat {
+  INTERACTIVE // everyone may publish unless the host restricts
+  BROADCAST // only hosts / approved speakers publish
+}
+
+enum MeetingVisibility {
+  PUBLIC // listed on public profile; joining still requires membership for in-app rooms
+  MEMBERS
+  GROUP
+  INVITED
+}
+
+enum RecurrenceFrequency {
+  NONE
+  DAILY
+  WEEKLY
+}
+
+enum MeetingStatus {
+  ACTIVE
+  CANCELLED
+  ARCHIVED
+}
+
+model Meeting {
+  id                String              @id @default(cuid())
+  organizationId    String
+  organization      Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  title             String
+  description       String?
+  theme             String?
+  scriptureRefs     String[]            @default([])
+  mode              MeetingMode
+  format            MeetingFormat       @default(INTERACTIVE)
+  visibility        MeetingVisibility   @default(MEMBERS)
+  groupId           String?
+  group             CommunityGroup?     @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  // External (WhatsApp) details
+  externalUrl       String?
+  externalInstructions String?
+  // In-app room settings
+  waitingRoom       Boolean             @default(false)
+  chatEnabled       Boolean             @default(true)
+  giftsEnabled      Boolean             @default(true)
+  maxParticipants   Int?
+  // Schedule (local wall-clock time in `timezone`)
+  timezone          String
+  startDate         String // YYYY-MM-DD (local)
+  startTime         String // HH:mm (local)
+  durationMinutes   Int
+  frequency         RecurrenceFrequency @default(NONE)
+  interval          Int                 @default(1)
+  byWeekday         Int[]               @default([]) // 1=Mon … 7=Sun (ISO)
+  untilDate         String? // YYYY-MM-DD (local, inclusive)
+  materializedUntil DateTime?
+  status            MeetingStatus       @default(ACTIVE)
+  createdById       String
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  hosts       MeetingHost[]
+  invitees    MeetingInvitee[]
+  agendaItems MeetingAgendaItem[]
+  occurrences MeetingOccurrence[]
+
+  @@index([organizationId, status])
+}
+
+enum MeetingHostRole {
+  HOST
+  CO_HOST
+}
+
+model MeetingHost {
+  id        String          @id @default(cuid())
+  meetingId String
+  meeting   Meeting         @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role      MeetingHostRole @default(HOST)
+
+  @@unique([meetingId, userId])
+  @@index([userId])
+}
+
+model MeetingInvitee {
+  id        String  @id @default(cuid())
+  meetingId String
+  meeting   Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([meetingId, userId])
+  @@index([userId])
+}
+
+model MeetingAgendaItem {
+  id              String  @id @default(cuid())
+  meetingId       String
+  meeting         Meeting @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  position        Int
+  title           String
+  details         String?
+  scriptureRef    String?
+  durationMinutes Int?
+
+  @@index([meetingId, position])
+}
+
+enum OccurrenceStatus {
+  SCHEDULED
+  LIVE
+  ENDED
+  CANCELLED
+}
+
+model MeetingOccurrence {
+  id                String           @id @default(cuid())
+  organizationId    String
+  organization      Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  meetingId         String
+  meeting           Meeting          @relation(fields: [meetingId], references: [id], onDelete: Cascade)
+  originalStartsAt  DateTime // series slot this occurrence was generated for
+  startsAt          DateTime
+  endsAt            DateTime
+  status            OccurrenceStatus @default(SCHEDULED)
+  rescheduled       Boolean          @default(false)
+  cancelReason      String?
+  roomName          String           @unique
+  locked            Boolean          @default(false)
+  liveStartedAt     DateTime?
+  liveEndedAt       DateTime?
+  postMeetingNote   String?
+  createdAt         DateTime         @default(now())
+  updatedAt         DateTime         @updatedAt
+
+  attendances MeetingAttendance[]
+  joinIntents MeetingJoinIntent[]
+  admissions  MeetingAdmission[]
+  bans        MeetingRoomBan[]
+  giftEvents  GiftEvent[]
+  reminders   MeetingReminderLog[]
+  participantStates MeetingParticipantState[]
+
+  @@unique([meetingId, originalStartsAt])
+  @@index([organizationId, startsAt])
+}
+
+enum AttendanceSource {
+  PROVIDER_WEBHOOK // reported by the real-time provider
+  HOST_MARKED // recorded manually by a host (e.g. for WhatsApp meetings)
+}
+
+model MeetingAttendance {
+  id               String            @id @default(cuid())
+  organizationId   String
+  occurrenceId     String
+  occurrence       MeetingOccurrence @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+  userId           String
+  user             User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  source           AttendanceSource
+  firstJoinedAt    DateTime
+  lastLeftAt       DateTime?
+  totalSeconds     Int               @default(0)
+  activeSessionStartedAt DateTime? // set while connected (webhook source)
+  markedById       String?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@unique([occurrenceId, userId])
+  @@index([organizationId, userId])
+}
+
+// Clicking "Join on WhatsApp" is NOT attendance. Kept for engagement analytics only.
+model MeetingJoinIntent {
+  id             String            @id @default(cuid())
+  organizationId String
+  occurrenceId   String
+  occurrence     MeetingOccurrence @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime          @default(now())
+
+  @@index([occurrenceId])
+}
+
+enum AdmissionStatus {
+  PENDING
+  ADMITTED
+  DENIED
+}
+
+model MeetingAdmission {
+  id           String            @id @default(cuid())
+  occurrenceId String
+  occurrence   MeetingOccurrence @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  status       AdmissionStatus   @default(PENDING)
+  decidedById  String?
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+
+  @@unique([occurrenceId, userId])
+}
+
+model MeetingRoomBan {
+  id           String            @id @default(cuid())
+  occurrenceId String
+  occurrence   MeetingOccurrence @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+  userId       String
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bannedById   String
+  createdAt    DateTime          @default(now())
+
+  @@unique([occurrenceId, userId])
+}
+
+// Persisted per-session state so speaker grants survive reconnects.
+model MeetingParticipantState {
+  id           String            @id @default(cuid())
+  occurrenceId String
+  occurrence   MeetingOccurrence @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+  userId       String
+  canSpeak     Boolean           @default(false) // broadcast rooms: explicitly granted speaker
+  speakingRevoked Boolean        @default(false) // interactive rooms: host revoked speaking
+  handRaisedAt DateTime?
+  updatedAt    DateTime          @updatedAt
+
+  @@unique([occurrenceId, userId])
+}
+
+model RealtimeWebhookEvent {
+  id         String   @id @default(cuid())
+  provider   String
+  eventId    String
+  type       String
+  receivedAt DateTime @default(now())
+
+  @@unique([provider, eventId])
+}
+
+model MeetingReminderLog {
+  id           String            @id @default(cuid())
+  occurrenceId String
+  occurrence   MeetingOccurrence @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+  userId       String
+  kind         String // e.g. "24h", "15m"
+  createdAt    DateTime          @default(now())
+
+  @@unique([occurrenceId, userId, kind])
+}
+
+// ---------------------------------------------------------------------------------------------
+// Community content
+// ---------------------------------------------------------------------------------------------
+
+enum PublishStatus {
+  DRAFT
+  PUBLISHED
+  ARCHIVED
+}
+
+model Announcement {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  groupId        String?
+  group          CommunityGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  title          String
+  body           String
+  pinned         Boolean         @default(false)
+  status         PublishStatus   @default(DRAFT)
+  publishedAt    DateTime?
+  authorId       String
+  createdAt      DateTime        @default(now())
+  updatedAt      DateTime        @updatedAt
+
+  @@index([organizationId, status, publishedAt])
+}
+
+model PrayerPoint {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  forDate        String // YYYY-MM-DD in the organisation's time zone
+  title          String
+  body           String
+  scriptureRefs  String[]      @default([])
+  status         PublishStatus @default(DRAFT)
+  publishedAt    DateTime?
+  authorId       String
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([organizationId, forDate])
+}
+
+enum PrayerVisibility {
+  PRIVATE
+  GROUP
+  ORGANIZATION
+}
+
+enum PrayerStatus {
+  OPEN
+  ANSWERED
+  CLOSED
+}
+
+enum ModerationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  HIDDEN
+}
+
+model PrayerRequest {
+  id               String           @id @default(cuid())
+  organizationId   String
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  authorId         String
+  author           User             @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  title            String
+  body             String
+  visibility       PrayerVisibility
+  groupId          String?
+  group            CommunityGroup?  @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  anonymous        Boolean          @default(false)
+  status           PrayerStatus     @default(OPEN)
+  moderationStatus ModerationStatus @default(APPROVED)
+  moderatedById    String?
+  answeredAt       DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
+
+  assignments     PrayerRequestAssignment[]
+  acknowledgements PrayerAcknowledgement[]
+  updates         PrayerRequestUpdate[]
+
+  @@index([organizationId, visibility, moderationStatus, createdAt])
+  @@index([authorId])
+}
+
+model PrayerRequestAssignment {
+  id             String        @id @default(cuid())
+  organizationId String
+  requestId      String
+  request        PrayerRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  assignedById   String
+  followUpAt     DateTime?
+  followUpSentAt DateTime?
+  createdAt      DateTime      @default(now())
+
+  @@unique([requestId, userId])
+  @@index([organizationId, userId])
+  @@index([followUpAt])
+}
+
+model PrayerAcknowledgement {
+  id        String        @id @default(cuid())
+  requestId String
+  request   PrayerRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  userId    String
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime      @default(now())
+
+  @@unique([requestId, userId])
+}
+
+model PrayerRequestUpdate {
+  id        String        @id @default(cuid())
+  requestId String
+  request   PrayerRequest @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User          @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  body      String
+  createdAt DateTime      @default(now())
+
+  @@index([requestId])
+}
+
+enum TestimonyAudience {
+  MEMBERS
+  PUBLIC
+}
+
+model Testimony {
+  id               String            @id @default(cuid())
+  organizationId   String
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  authorId         String
+  author           User              @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  prayerRequestId  String? // optional link chosen by the author
+  title            String
+  body             String
+  audience         TestimonyAudience @default(MEMBERS)
+  showName         Boolean           @default(true)
+  consentGivenAt   DateTime
+  moderationStatus ModerationStatus  @default(PENDING)
+  moderatedById    String?
+  publishedAt      DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+
+  @@index([organizationId, moderationStatus])
+}
+
+enum ReportTarget {
+  PRAYER_REQUEST
+  TESTIMONY
+  ANNOUNCEMENT
+  MEMBER
+  MEETING
+}
+
+enum ReportStatus {
+  OPEN
+  RESOLVED
+  DISMISSED
+}
+
+model ContentReport {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  reporterId     String
+  reporter       User         @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  targetType     ReportTarget
+  targetId       String
+  reason         String
+  status         ReportStatus @default(OPEN)
+  resolution     String?
+  resolvedById   String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  @@index([organizationId, status])
+}
+
+// ---------------------------------------------------------------------------------------------
+// Programmes
+// ---------------------------------------------------------------------------------------------
+
+enum ProgrammeType {
+  BIBLE_STUDY
+  PRAYER_CHALLENGE
+  DEVOTIONAL
+  FASTING
+  READING_PLAN
+  REFLECTION
+  MENTORSHIP
+}
+
+model Programme {
+  id              String          @id @default(cuid())
+  organizationId  String
+  organization    Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  type            ProgrammeType
+  title           String
+  description     String?
+  startDate       String // YYYY-MM-DD in organisation time zone
+  durationDays    Int
+  groupId         String?
+  group           CommunityGroup? @relation(fields: [groupId], references: [id], onDelete: SetNull)
+  trackCompletion Boolean         @default(true)
+  status          PublishStatus   @default(DRAFT)
+  createdById     String
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  activities  ProgrammeActivity[]
+  enrollments ProgrammeEnrollment[]
+
+  @@index([organizationId, status])
+}
+
+model ProgrammeActivity {
+  id                  String    @id @default(cuid())
+  programmeId         String
+  programme           Programme @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+  dayNumber           Int
+  title               String
+  body                String?
+  scriptureRefs       String[]  @default([])
+  resourceUrl         String?
+  reflectionQuestions String[]  @default([])
+
+  completions ActivityCompletion[]
+
+  @@unique([programmeId, dayNumber])
+}
+
+model ProgrammeEnrollment {
+  id          String    @id @default(cuid())
+  programmeId String
+  programme   Programme @relation(fields: [programmeId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  completions ActivityCompletion[]
+
+  @@unique([programmeId, userId])
+}
+
+model ActivityCompletion {
+  id           String              @id @default(cuid())
+  enrollmentId String
+  enrollment   ProgrammeEnrollment @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  activityId   String
+  activity     ProgrammeActivity   @relation(fields: [activityId], references: [id], onDelete: Cascade)
+  completedAt  DateTime            @default(now())
+
+  @@unique([enrollmentId, activityId])
+}
+
+// ---------------------------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------------------------
+
+enum NotificationCategory {
+  MEETINGS
+  ANNOUNCEMENTS
+  PRAYER
+  PROGRAMMES
+  FUNDRAISING
+  ACCOUNT // security/transactional — always on
+}
+
+model Notification {
+  id             String               @id @default(cuid())
+  userId         String
+  user           User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  organizationId String?
+  organization   Organization?        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  category       NotificationCategory
+  title          String
+  body           String?
+  link           String?
+  readAt         DateTime?
+  createdAt      DateTime             @default(now())
+
+  @@index([userId, readAt, createdAt])
+}
+
+model NotificationPreference {
+  id       String               @id @default(cuid())
+  userId   String
+  user     User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  category NotificationCategory
+  inApp    Boolean              @default(true)
+  email    Boolean              @default(true)
+
+  @@unique([userId, category])
+}
+
+enum EmailStatus {
+  PENDING
+  SENT
+  FAILED
+}
+
+model EmailOutbox {
+  id          String      @id @default(cuid())
+  to          String
+  subject     String
+  textBody    String
+  htmlBody    String?
+  category    String
+  status      EmailStatus @default(PENDING)
+  attempts    Int         @default(0)
+  lastError   String?
+  nextAttemptAt DateTime  @default(now())
+  sentAt      DateTime?
+  createdAt   DateTime    @default(now())
+
+  @@index([status, nextAttemptAt])
+}
+
+// ---------------------------------------------------------------------------------------------
+// Fundraising (money belongs to the organisation, never pooled by the platform)
+// ---------------------------------------------------------------------------------------------
+
+enum PaymentProviderId {
+  PAYSTACK
+  STRIPE
+  SIMULATOR
+}
+
+enum ConnectionStatus {
+  NOT_CONFIGURED
+  ONBOARDING_REQUIRED
+  PENDING_VERIFICATION
+  VERIFIED
+  RESTRICTED
+  DISCONNECTED
+}
+
+model PaymentProviderConnection {
+  id                String            @id @default(cuid())
+  organizationId    String
+  organization      Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  provider          PaymentProviderId
+  status            ConnectionStatus  @default(ONBOARDING_REQUIRED)
+  providerAccountId String? // Stripe acct_… or Paystack subaccount code
+  accountName       String? // name confirmed by the provider
+  bankName          String?
+  accountLast4      String?
+  country           String?
+  currencies        String[]          @default([])
+  chargesEnabled    Boolean           @default(false)
+  payoutsEnabled    Boolean           @default(false)
+  requirements      String[]          @default([]) // outstanding provider requirement codes
+  providerApproved  Boolean           @default(false) // provider-side capability confirmation
+  platformReviewedAt DateTime? // BridgeCodes KYC review (Paystack flow)
+  platformReviewedById String?
+  reviewNote        String?
+  lastSyncedAt      DateTime?
+  disconnectedAt    DateTime?
+  createdById       String
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  donations Donation[]
+
+  @@unique([provider, providerAccountId])
+  @@index([organizationId, status])
+}
+
+enum CampaignStatus {
+  DRAFT
+  PENDING_APPROVAL
+  ACTIVE
+  PAUSED
+  ENDED
+  REJECTED
+}
+
+enum CampaignVisibility {
+  PUBLIC
+  MEMBERS
+}
+
+enum CampaignPurpose {
+  GENERAL
+  COMMUNITY_ACTIVITY
+  CONFERENCE
+  OUTREACH
+  WELFARE
+  EMERGENCY
+}
+
+model FundraisingCampaign {
+  id                String             @id @default(cuid())
+  organizationId    String
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  title             String
+  description       String
+  purpose           CampaignPurpose    @default(GENERAL)
+  beneficiary       String?
+  imageUrl          String?
+  currency          String
+  targetAmount      Int? // minor units
+  suggestedAmounts  Int[]              @default([]) // minor units
+  minAmount         Int                @default(100)
+  maxAmount         Int                @default(1000000000)
+  allowCustomAmount Boolean            @default(true)
+  allowAnonymous    Boolean            @default(true)
+  allowGuests       Boolean            @default(true)
+  visibility        CampaignVisibility @default(PUBLIC)
+  startsAt          DateTime?
+  endsAt            DateTime?
+  status            CampaignStatus     @default(DRAFT)
+  terms             String?
+  createdById       String
+  approvedById      String?
+  approvedAt        DateTime?
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+
+  donations Donation[]
+  updates   CampaignUpdate[]
+
+  @@index([organizationId, status])
+}
+
+model CampaignUpdate {
+  id         String              @id @default(cuid())
+  campaignId String
+  campaign   FundraisingCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  body       String
+  authorId   String
+  createdAt  DateTime            @default(now())
+}
+
+enum PaymentPurpose {
+  DONATION
+  GIFT // paid virtual gift — NOT recorded as a donation
+}
+
+enum DonationStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  ABANDONED
+  REFUNDED
+  PARTIALLY_REFUNDED
+  DISPUTED
+}
+
+// One row per checkout attempt. `purpose` separates donations from paid gifts.
+model Donation {
+  id                 String                    @id @default(cuid())
+  organizationId     String
+  organization       Organization              @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  campaignId         String?
+  campaign           FundraisingCampaign?      @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  connectionId       String
+  connection         PaymentProviderConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  purpose            PaymentPurpose            @default(DONATION)
+  donorUserId        String?
+  donor              User?                     @relation(fields: [donorUserId], references: [id], onDelete: SetNull)
+  donorName          String?
+  donorEmail         String?
+  anonymous          Boolean                   @default(false)
+  message            String?
+  provider           PaymentProviderId
+  reference          String                    @unique // our reference sent to the provider
+  providerPaymentId  String? // provider checkout session / transaction id
+  providerChargeId   String? // underlying charge (Stripe PaymentIntent / Paystack transaction id)
+  checkoutUrl        String?
+  currency           String
+  amount             Int // amount donated (minor units) — set by the server
+  platformFeeAmount  Int                       @default(0)
+  processingFeeAmount Int? // reported by the provider
+  amountCharged      Int? // confirmed by the provider
+  amountRefunded     Int                       @default(0)
+  netAmount          Int? // amount due to the organisation after fees and refunds
+  status             DonationStatus            @default(PENDING)
+  failureReason      String?
+  receiptNumber      String?                   @unique
+  receiptSentAt      DateTime?
+  paidAt             DateTime?
+  giftId             String? // for purpose = GIFT
+  occurrenceId       String? // for purpose = GIFT
+  createdAt          DateTime                  @default(now())
+  updatedAt          DateTime                  @updatedAt
+
+  ledgerEntries LedgerEntry[]
+  refunds       Refund[]
+  disputes      Dispute[]
+
+  @@unique([provider, providerPaymentId])
+  @@index([provider, providerChargeId])
+  @@index([organizationId, status, createdAt])
+  @@index([donorUserId])
+  @@index([campaignId])
+}
+
+enum LedgerEntryType {
+  CHARGE
+  PROCESSING_FEE
+  PLATFORM_FEE
+  REFUND
+  DISPUTE_HOLD
+  DISPUTE_RELEASE
+  DISPUTE_LOSS
+  SETTLEMENT
+}
+
+// Append-only. Positive amounts increase the organisation's balance, negative reduce it.
+model LedgerEntry {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  donationId     String?
+  donation       Donation?       @relation(fields: [donationId], references: [id], onDelete: Restrict)
+  type           LedgerEntryType
+  amount         Int
+  currency       String
+  description    String?
+  sourceEventId  String? // provider event that caused this entry
+  createdAt      DateTime        @default(now())
+
+  @@unique([donationId, type, sourceEventId])
+  @@index([organizationId, createdAt])
+}
+
+enum RefundStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+}
+
+model Refund {
+  id               String       @id @default(cuid())
+  organizationId   String
+  organization     Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  donationId       String
+  donation         Donation     @relation(fields: [donationId], references: [id], onDelete: Restrict)
+  amount           Int
+  currency         String
+  reason           String?
+  status           RefundStatus @default(PENDING)
+  providerRefundId String?
+  requestedById    String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  @@unique([donationId, providerRefundId])
+  @@index([organizationId])
+}
+
+enum DisputeStatus {
+  OPEN
+  WON
+  LOST
+  CLOSED
+}
+
+model Dispute {
+  id                String        @id @default(cuid())
+  organizationId    String
+  organization      Organization  @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  donationId        String
+  donation          Donation      @relation(fields: [donationId], references: [id], onDelete: Restrict)
+  providerDisputeId String        @unique
+  amount            Int
+  currency          String
+  reason            String?
+  status            DisputeStatus @default(OPEN)
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  @@index([organizationId])
+}
+
+model SettlementRecord {
+  id                   String            @id @default(cuid())
+  organizationId       String
+  organization         Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  provider             PaymentProviderId
+  providerSettlementId String
+  amount               Int
+  currency             String
+  status               String
+  settledAt            DateTime?
+  createdAt            DateTime          @default(now())
+
+  @@unique([provider, providerSettlementId])
+  @@index([organizationId])
+}
+
+// Development/test-only state for the payment simulator provider (never used when APP_ENV=production).
+model SimulatorRecord {
+  key       String   @id // "account:<id>" | "payment:<reference>"
+  data      Json     @db.JsonB
+  updatedAt DateTime @updatedAt
+}
+
+// Idempotency store for provider webhooks.
+model PaymentWebhookEvent {
+  id          String            @id @default(cuid())
+  provider    PaymentProviderId
+  eventId     String
+  type        String
+  receivedAt  DateTime          @default(now())
+  processedAt DateTime?
+  outcome     String?
+
+  @@unique([provider, eventId])
+}
+
+// ---------------------------------------------------------------------------------------------
+// Virtual gifts
+// ---------------------------------------------------------------------------------------------
+
+model VirtualGift {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  name           String
+  emoji          String
+  position       Int          @default(0)
+  available      Boolean      @default(true)
+  showInFeed     Boolean      @default(true)
+  priceAmount    Int? // null / 0 = free; minor units
+  currency       String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  events GiftEvent[]
+
+  @@unique([organizationId, name])
+}
+
+model GiftEvent {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  occurrenceId   String
+  occurrence     MeetingOccurrence @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+  giftId         String
+  gift           VirtualGift       @relation(fields: [giftId], references: [id], onDelete: Cascade)
+  senderId       String
+  sender         User              @relation(fields: [senderId], references: [id], onDelete: Cascade)
+  showSenderName Boolean           @default(true)
+  donationId     String?           @unique // set for paid gifts once payment succeeds
+  createdAt      DateTime          @default(now())
+
+  @@index([occurrenceId, createdAt])
+}
+
+// ---------------------------------------------------------------------------------------------
+// SaaS subscriptions (BridgeCodes revenue — separate from community donations)
+// ---------------------------------------------------------------------------------------------
+
+model Plan {
+  id               String   @id @default(cuid())
+  code             String   @unique // FREE, COMMUNITY, GROWTH, MINISTRY, ENTERPRISE
+  name             String
+  description      String?
+  currency         String   @default("USD")
+  monthlyPrice     Int? // minor units; null = contact sales
+  yearlyPrice      Int?
+  trialDays        Int      @default(0)
+  graceDays        Int      @default(7)
+  platformFeeBps   Int      @default(0) // optional disclosed platform fee on donations (basis points)
+  public           Boolean  @default(true)
+  position         Int      @default(0)
+  stripeMonthlyPriceId String?
+  stripeYearlyPriceId  String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  entitlements  PlanEntitlement[]
+  subscriptions Subscription[]
+}
+
+model PlanEntitlement {
+  id        String  @id @default(cuid())
+  planId    String
+  plan      Plan    @relation(fields: [planId], references: [id], onDelete: Cascade)
+  key       String // e.g. "feature.prayer_requests", "limit.members"
+  enabled   Boolean @default(true)
+  limit     Int? // null = unlimited (for limit.* keys)
+
+  @@unique([planId, key])
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  EXPIRED
+}
+
+enum BillingInterval {
+  MONTHLY
+  YEARLY
+}
+
+model Subscription {
+  id                     String             @id @default(cuid())
+  organizationId         String             @unique
+  organization           Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  planId                 String
+  plan                   Plan               @relation(fields: [planId], references: [id])
+  status                 SubscriptionStatus @default(ACTIVE)
+  interval               BillingInterval    @default(MONTHLY)
+  currentPeriodStart     DateTime
+  currentPeriodEnd       DateTime?
+  trialEndsAt            DateTime?
+  graceEndsAt            DateTime?
+  cancelAtPeriodEnd      Boolean            @default(false)
+  canceledAt             DateTime?
+  billingProvider        String? // "stripe" | "manual"
+  providerCustomerId     String?
+  providerSubscriptionId String?            @unique
+  createdAt              DateTime           @default(now())
+  updatedAt              DateTime           @updatedAt
+}
+
+enum InvoiceStatus {
+  OPEN
+  PAID
+  VOID
+  UNCOLLECTIBLE
+}
+
+model SubscriptionInvoice {
+  id                String        @id @default(cuid())
+  organizationId    String
+  organization      Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  providerInvoiceId String?       @unique
+  planCode          String
+  amount            Int
+  currency          String
+  status            InvoiceStatus
+  periodStart       DateTime?
+  periodEnd         DateTime?
+  hostedUrl         String?
+  createdAt         DateTime      @default(now())
+
+  @@index([organizationId])
+}
+
+model BillingWebhookEvent {
+  id          String    @id @default(cuid())
+  provider    String
+  eventId     String
+  type        String
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+
+  @@unique([provider, eventId])
+}
+
+model UsageRecord {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  metric         String // e.g. "meeting.participant_minutes"
+  period         String // YYYY-MM
+  quantity       Int          @default(0)
+  updatedAt      DateTime     @updatedAt
+
+  @@unique([organizationId, metric, period])
+}
+
+// ---------------------------------------------------------------------------------------------
+// Administration
+// ---------------------------------------------------------------------------------------------
+
+model AuditLog {
+  id             String        @id @default(cuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  actorId        String?
+  actor          User?         @relation(fields: [actorId], references: [id], onDelete: SetNull)
+  action         String
+  targetType     String?
+  targetId       String?
+  metadata       Json?         @db.JsonB // never contains secrets or confidential content
+  createdAt      DateTime      @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([action, createdAt])
+}
+
+enum SupportStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+model SupportRequest {
+  id             String        @id @default(cuid())
+  organizationId String?
+  organization   Organization? @relation(fields: [organizationId], references: [id], onDelete: SetNull)
+  userId         String?
+  user           User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  email          String
+  subject        String
+  body           String
+  status         SupportStatus @default(OPEN)
+  internalNote   String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  @@index([status, createdAt])
+}
+
+model PlatformSetting {
+  key       String   @id
+  value     Json     @db.JsonB
+  updatedAt DateTime @updatedAt
+  updatedById String?
+}
