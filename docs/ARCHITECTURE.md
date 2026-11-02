@@ -11,7 +11,7 @@
 | Auth | **In-house session auth** (scrypt password hashing, opaque random session tokens stored as SHA-256 hashes, `HttpOnly; Secure; SameSite=Lax` cookies) | Follows the OWASP session cheat sheet and the pattern Lucia's maintainers recommend after deprecating Lucia; gives full control over multi-tenant checks and is fully testable. Social login can be added later. |
 | Real-time | **LiveKit** (Cloud or self-hosted) via `livekit-server-sdk` and `@livekit/components-react` | Open-source SFU with official SDKs, server-issued JWT access tokens, server-side participant control (mute, remove, permission updates), signed webhooks, and a self-hosting escape hatch. Agora was considered; LiveKit's open-source server and permission model fit the provider abstraction better. |
 | Payments | **Paystack** (subaccounts + split) and **Stripe Connect** (direct charges) behind `PaymentProvider` | Paystack covers Nigeria/Ghana/Kenya/South Africa; Stripe Connect covers international organisations with provider-hosted KYC. |
-| Billing | **Stripe Billing** behind `BillingProvider` (optional) | Separate from donations. |
+| Billing | **Stripe Billing** (optional, `BILLING_PROVIDER=stripe`) in `src/server/billing/service.ts`, or manual plan assignment | Separate from donations. A provider interface can be extracted when a second billing provider is added. |
 | Email | `EmailProvider` with `log` (dev) and `resend` (HTTP API) drivers + DB outbox | Retries, no vendor lock-in. |
 | Storage | `StorageDriver` with `local` (dev) and `s3` (any S3-compatible) drivers | Public bucket/prefix for approved assets only. |
 | Time zones | **Luxon** | Correct IANA zone / DST arithmetic for recurring meetings. |
@@ -60,7 +60,7 @@ in the UI layer.
 
 - Shared database, shared schema; every tenant-owned table has `organizationId` (FK, indexed).
   Exceptions are documented in `docs/DATABASE.md` (e.g. `User`, `Session`, `Plan`).
-- `getOrgContext(userId, slug)` loads the organisation and the caller's **active** membership
+- `getOrgContext(actor, { slug })` loads the organisation and the caller's **active** membership
   in one query and returns `{ org, membership, permissions }`. It throws `NotFoundError` (not
   `Forbidden`) for non-members of private resources to avoid leaking existence.
 - Every service query includes `organizationId: ctx.org.id` *and* the object id, so a valid id
@@ -116,8 +116,8 @@ ledger entries → enqueue receipt. See `docs/PAYMENTS.md`.
 
 `Plan` + `PlanEntitlement` (feature key, enabled, numeric limit) → `Subscription` (one per org)
 → `SubscriptionInvoice`. `getEntitlements(orgId)` computes the effective plan (falls back to
-FREE when expired/cancelled past grace). Guards: `assertFeature(ctx, key)`,
-`assertLimit(ctx, key, currentCount)`. See `docs/SUBSCRIPTIONS.md`.
+FREE when expired/cancelled past grace). Guards: `assertFeature(orgId, key)`,
+`assertWithinLimit(orgId, key, currentCount)`. See `docs/SUBSCRIPTIONS.md`.
 
 ## 8. Background work
 
