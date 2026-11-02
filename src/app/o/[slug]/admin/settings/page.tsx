@@ -48,6 +48,11 @@ export default async function SettingsPage({ params }: { params: Promise<{ slug:
             <CheckboxField name="allowAnonymousPrayer" label="Allow anonymous prayer requests" defaultChecked={org.allowAnonymousPrayer} />
             <CheckboxField name="moderateSharedPrayer" label="Review group and community prayer requests before they appear" defaultChecked={org.moderateSharedPrayer} hint="Private requests always go only to prayer coordinators." />
             <CheckboxField name="moderateTestimonies" label="Review members-only testimonies before they appear" defaultChecked={org.moderateTestimonies} hint="Public testimonies are always reviewed." />
+            {ctx.membership.roles.includes("OWNER") ? (
+              <CheckboxField name="requireMfaForAdmins" label="Require two-factor authentication for owners, administrators, finance administrators and prayer coordinators" defaultChecked={org.requireMfaForAdmins} hint="People in these roles without two-factor keep member access only until they turn it on. You need two-factor yourself to enable this." />
+            ) : (
+              org.requireMfaForAdmins && <input type="hidden" name="requireMfaForAdmins" value="on" />
+            )}
             <SubmitButton>Save settings</SubmitButton>
           </ActionForm>
         </Card>

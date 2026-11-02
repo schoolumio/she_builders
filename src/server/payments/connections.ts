@@ -2,7 +2,7 @@ import "server-only";
 import type { PaymentProviderConnection, PaymentProviderId } from "@prisma/client";
 import { z } from "zod";
 import { db } from "../db";
-import { ConflictError, ForbiddenError, NotFoundError, ValidationError, AppError } from "../errors";
+import { ConflictError, NotFoundError, ValidationError, AppError } from "../errors";
 import { parseInput } from "../validate";
 import { audit } from "../audit";
 import { env } from "../env";
@@ -10,6 +10,7 @@ import { errorMeta, log } from "../log";
 import { rateLimit } from "../rate-limit";
 import { assertFeature } from "../billing/entitlements";
 import type { Actor, OrgContext } from "../tenancy/context";
+import { requirePlatformSuper } from "../tenancy/platform-access";
 import { requireActiveOrg, requirePermission } from "../tenancy/context";
 import { getPaymentProvider } from "./providers";
 import { deriveConnectionStatus } from "./status";
@@ -147,7 +148,7 @@ export async function disconnect(ctx: OrgContext, connectionId: string) {
 
 /** BridgeCodes review for providers without hosted KYC (Paystack). Platform admins only. */
 export async function platformReviewConnection(admin: Actor, connectionId: string, approve: boolean, note?: string) {
-  if (admin.platformRole !== "SUPER_ADMIN") throw new ForbiddenError();
+  requirePlatformSuper(admin);
   const conn = await db.paymentProviderConnection.findUnique({ where: { id: connectionId } });
   if (!conn) throw new NotFoundError("Connection not found.");
   const reviewed = await db.paymentProviderConnection.update({

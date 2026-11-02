@@ -41,6 +41,12 @@ model User {
   avatarUrl       String?
   platformRole    PlatformRole?
   status          UserStatus    @default(ACTIVE)
+  // Two-factor authentication (TOTP, RFC 6238). Secrets are AES-GCM encrypted; recovery codes hashed.
+  mfaSecretEnc        String?
+  mfaPendingSecretEnc String?
+  mfaEnabledAt        DateTime?
+  mfaLastUsedStep     Int?
+  mfaRecoveryHashes   String[]      @default([])
   createdAt       DateTime      @default(now())
   updatedAt       DateTime      @updatedAt
   deletedAt       DateTime?
@@ -88,6 +94,7 @@ model Session {
 enum AuthTokenType {
   EMAIL_VERIFICATION
   PASSWORD_RESET
+  MFA_CHALLENGE
 }
 
 model AuthToken {
@@ -98,6 +105,7 @@ model AuthToken {
   tokenHash String        @unique
   expiresAt DateTime
   usedAt    DateTime?
+  attempts  Int           @default(0)
   createdAt DateTime      @default(now())
 
   @@index([userId, type])
@@ -169,6 +177,7 @@ model Organization {
   moderateTestimonies  Boolean        @default(true)
   paidGiftsEnabled     Boolean        @default(false)
   fundraisingEnabled   Boolean        @default(false)
+  requireMfaForAdmins  Boolean        @default(false)
   termsAcceptedAt     DateTime
   termsAcceptedById   String
   createdAt           DateTime        @default(now())

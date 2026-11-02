@@ -4,4 +4,6 @@ export type ActionState = {
   message?: string;
   fieldErrors?: Record<string, string>;
   values?: Record<string, string>;
+  /** Extra data for the form that submitted (e.g. one-time recovery codes). Never cached. */
+  data?: Record<string, unknown>;
 } | null;

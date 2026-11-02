@@ -4,14 +4,18 @@ import { db } from "../db";
 import { ForbiddenError, NotFoundError } from "../errors";
 import { permissionsFor, type Permission } from "./permissions";
 
-export type Actor = Pick<User, "id" | "name" | "email" | "platformRole">;
+export type Actor = Pick<User, "id" | "name" | "email" | "platformRole"> & { mfaEnabledAt?: Date | null };
 
 export type OrgContext = {
   actor: Actor;
   org: Organization;
   membership: Membership;
   permissions: Set<Permission>;
+  /** True when the organisation requires two-factor for elevated roles and the actor has not enabled it. */
+  mfaRestricted: boolean;
 };
+
+export const MFA_GATED_ROLES = ["OWNER", "ADMIN", "FINANCE_ADMIN", "PRAYER_COORDINATOR"] as const;
 
 /**
  * Resolves the caller's ACTIVE membership in an organisation identified by slug or id.
@@ -29,7 +33,10 @@ export async function getOrgContext(actor: Actor, slugOrId: { slug: string } | {
   if (org.status === "SUSPENDED" && !membership.roles.includes("OWNER")) {
     throw new ForbiddenError("This community is currently suspended.");
   }
-  return { actor, org, membership, permissions: permissionsFor(membership.roles) };
+  // Organisations may require two-factor for elevated roles; without it those roles are not effective.
+  const mfaRestricted = org.requireMfaForAdmins && !actor.mfaEnabledAt && membership.roles.some((r) => (MFA_GATED_ROLES as readonly string[]).includes(r));
+  const effectiveRoles = mfaRestricted ? membership.roles.filter((r) => !(MFA_GATED_ROLES as readonly string[]).includes(r)) : membership.roles;
+  return { actor, org, membership, permissions: permissionsFor(effectiveRoles), mfaRestricted };
 }
 
 export function can(ctx: OrgContext, permission: Permission): boolean {

@@ -5,6 +5,7 @@ import { redirect } from "next/navigation";
 import { createSession, SESSION_COOKIE, validateSessionToken } from "./session";
 import { env } from "../env";
 import { sha256 } from "../crypto";
+import { platformMfaRequired } from "./mfa";
 
 export type CurrentUser = NonNullable<Awaited<ReturnType<typeof getCurrentUser>>>;
 
@@ -22,7 +23,7 @@ export const getCurrentUser = cache(async () => {
       // Cookies are read-only during server component rendering; refreshed on next action.
     }
   }
-  const { passwordHash: _ph, ...user } = result.user;
+  const { passwordHash: _ph, mfaSecretEnc: _ms, mfaPendingSecretEnc: _mp, mfaRecoveryHashes: _mr, ...user } = result.user;
   return user;
 });
 
@@ -35,6 +36,7 @@ export async function requireUser(next?: string) {
 export async function requirePlatformAdmin() {
   const user = await requireUser("/platform");
   if (!user.platformRole) redirect("/app");
+  if (platformMfaRequired() && !user.mfaEnabledAt) redirect("/app/security?required=platform");
   return user;
 }
 

@@ -83,6 +83,11 @@ export default async function OrgLayout({ children, params }: { children: React.
               {ctx.org.suspendedReason ?? "Contact support for details."} Changes are disabled until the suspension is lifted.
             </Notice>
           )}
+          {ctx.mfaRestricted && (
+            <Notice tone="warning" title="Administrative access paused" className="mb-6">
+              {ctx.org.name} requires two-factor authentication for administrators. <a className="underline" href="/app/security">Turn it on in Account security</a> to restore your access.
+            </Notice>
+          )}
           {ent.degraded && p.has("billing.view") && (
             <Notice tone="warning" title="Your paid plan has lapsed" className="mb-6">
               The community is now using Free plan limits. Existing content is kept. An owner can renew in Plan & billing.

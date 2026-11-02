@@ -41,6 +41,9 @@ export async function TopBar({ user }: { user: CurrentUser }) {
               <Link href="/app/donations" className="block rounded px-3 py-2 text-sm hover:bg-violet-50">
                 My giving
               </Link>
+              <Link href="/app/security" className="block rounded px-3 py-2 text-sm hover:bg-violet-50">
+                Account security
+              </Link>
               {user.platformRole && (
                 <Link href="/platform" className="block rounded px-3 py-2 text-sm hover:bg-violet-50 sm:hidden">
                   Platform admin

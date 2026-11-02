@@ -6,6 +6,7 @@ import { randomToken, sha256 } from "../crypto";
 const TTL_MS: Record<AuthTokenType, number> = {
   EMAIL_VERIFICATION: 48 * 60 * 60 * 1000,
   PASSWORD_RESET: 60 * 60 * 1000,
+  MFA_CHALLENGE: 10 * 60 * 1000,
 };
 
 /** Issues a single-use token. Previous unused tokens of the same type are invalidated. */

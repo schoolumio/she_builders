@@ -6,6 +6,7 @@ import { AppError, ConfigurationError, ForbiddenError, NotFoundError, Validation
 import { audit } from "../audit";
 import { env } from "../env";
 import type { Actor, OrgContext } from "../tenancy/context";
+import { requirePlatformSuper } from "../tenancy/platform-access";
 import { requirePermission } from "../tenancy/context";
 import { getEntitlements } from "./entitlements";
 
@@ -101,7 +102,7 @@ const MANUAL_STATUSES: SubscriptionStatus[] = ["TRIALING", "ACTIVE", "PAST_DUE",
 
 /** Platform admin manual plan assignment (used while online billing is not configured, or for Enterprise). */
 export async function assignPlanManually(admin: Actor, organizationId: string, input: { planCode: string; status: SubscriptionStatus; periodEnd?: Date | null; interval?: BillingInterval; note?: string }) {
-  if (admin.platformRole !== "SUPER_ADMIN") throw new ForbiddenError();
+  requirePlatformSuper(admin);
   if (!MANUAL_STATUSES.includes(input.status)) throw new ValidationError("Invalid status.");
   const plan = await db.plan.findUnique({ where: { code: input.planCode } });
   if (!plan) throw new NotFoundError("Plan not found.");

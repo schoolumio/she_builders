@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { db } from "../db";
-import { ConflictError, NotFoundError } from "../errors";
+import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from "../errors";
 import { parseInput } from "../validate";
 import { audit } from "../audit";
 import { rateLimit } from "../rate-limit";
@@ -130,12 +130,17 @@ const communitySettingsSchema = z.object({
   allowAnonymousPrayer: checkbox,
   moderateSharedPrayer: checkbox,
   moderateTestimonies: checkbox,
+  requireMfaForAdmins: checkbox,
 });
 
 export async function updateCommunitySettings(ctx: OrgContext, input: unknown) {
   requirePermission(ctx, "org.settings");
   requireActiveOrg(ctx);
   const data = parseInput(communitySettingsSchema, input);
+  if (data.requireMfaForAdmins !== ctx.org.requireMfaForAdmins) {
+    if (!ctx.membership.roles.includes("OWNER")) throw new ForbiddenError("Only an owner can change the two-factor requirement.");
+    if (data.requireMfaForAdmins && !ctx.actor.mfaEnabledAt) throw new ValidationError("Turn on two-factor authentication for your own account first.", { requireMfaForAdmins: "Enable two-factor in Account security first." });
+  }
   await db.organization.update({ where: { id: ctx.org.id }, data });
   await audit({ organizationId: ctx.org.id, actorId: ctx.actor.id, action: "org.community_settings_updated", metadata: data });
 }

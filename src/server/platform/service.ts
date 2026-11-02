@@ -7,19 +7,15 @@ import { parseInput } from "../validate";
 import { audit } from "../audit";
 import { rateLimit } from "../rate-limit";
 import type { Actor } from "../tenancy/context";
+import { requirePlatformStaff, requirePlatformSuper } from "../tenancy/platform-access";
 import { emailSchema, optionalText } from "@/lib/validation";
 import { getRealtimeProvider } from "../realtime";
 import { allProviders } from "../payments/providers";
 import { billingProviderName } from "../billing/service";
 import { isEmailConfigured } from "../email";
 
-function requireSuper(actor: Actor) {
-  if (actor.platformRole !== "SUPER_ADMIN") throw new ForbiddenError();
-}
-
-function requireStaff(actor: Actor) {
-  if (!actor.platformRole) throw new ForbiddenError();
-}
+const requireSuper = requirePlatformSuper;
+const requireStaff = requirePlatformStaff;
 
 /** Organisation metadata only — no prayer requests, testimonies, donor details or member content. */
 export async function listOrganizationsForPlatform(actor: Actor, q?: string) {
