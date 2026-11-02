@@ -35,8 +35,16 @@ test.describe.serial("acceptance workflow", () => {
     await ownerPage.getByLabel("About").fill("An online women's prayer community.");
     await ownerPage.getByRole("button", { name: "Save profile" }).click();
     await expect(ownerPage.getByText("Community profile saved.")).toBeVisible();
+    // Upload a logo (a real 1×1 PNG; content type is sniffed server-side).
+    const png = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==", "base64");
+    await ownerPage.getByLabel("Logo", { exact: true }).setInputFiles({ name: "logo.png", mimeType: "image/png", buffer: png });
+    await ownerPage.getByRole("button", { name: "Upload" }).first().click();
+    await expect(ownerPage.getByText("Logo updated.")).toBeVisible();
     await ownerPage.goto(`/c/${slug}`);
     await expect(ownerPage.getByText("Praying together across time zones")).toBeVisible();
+    const logo = await db.organization.findUniqueOrThrow({ where: { slug } });
+    expect(logo.logoUrl).toMatch(/^\/api\/files\/orgs\/.+\.png$/);
+    expect((await ownerPage.request.get(logo.logoUrl!)).headers()["content-type"]).toBe("image/png");
 
     // Platform admin assigns the Ministry plan manually (online billing is not configured in e2e).
     const org = await db.organization.findUniqueOrThrow({ where: { slug } });

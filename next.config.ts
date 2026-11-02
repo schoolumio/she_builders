@@ -38,6 +38,8 @@ const csp = [
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   serverExternalPackages: ["@prisma/client"],
+  // Image uploads (logos, covers, campaign images) are up to 2 MB plus multipart overhead.
+  experimental: { serverActions: { bodySizeLimit: "3mb" } },
   async headers() {
     return [
       {
