@@ -61,10 +61,19 @@ end-to-end with external credentials (tested with fakes/simulator) · `[ ]` not 
 - [ ] Custom domains; advanced custom branding beyond logo/accent
 
 ## Phase 8 — Production readiness
-- [x] 110 unit/integration tests and 13 Playwright tests passing
+- [x] 126 unit/integration tests and 16 Playwright tests passing (as of Phase 9)
 - [x] Typecheck, lint and `npm audit` clean; CI workflow
 - [x] Deployment, operations, database, meetings, payments and subscriptions documentation
 - [ ] External items in `docs/PRODUCTION_CHECKLIST.md`
+
+## Phase 9 — Production hardening (no external credentials required)
+- [x] Two-factor authentication (TOTP + recovery codes), platform-staff requirement, per-organisation requirement for elevated roles
+- [x] Data-retention purge jobs with tests proving financial records are untouched
+- [x] Accent-colour contrast validation; gold text token darkened to pass WCAG AA
+- [x] axe-core accessibility scans in Playwright (24 pages, 0 violations)
+- [x] Structured logging of unhandled server errors with optional alert webhook
+- [~] Dockerfile and docker-compose stack (image build blocked in the sandbox; unverified)
+- [ ] Staging deployment with real provider sandboxes (needs credentials — next phase)
 
 ## Acceptance criteria status
 | # | Criterion | Status | Evidence |

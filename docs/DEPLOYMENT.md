@@ -51,18 +51,24 @@ Then:
 4. Health check: `GET /api/health` (200 = DB reachable).
 5. Verify headers (CSP, HSTS) and run through `docs/PRODUCTION_CHECKLIST.md`.
 
-## Docker (optional)
-```dockerfile
-FROM node:22-slim
-RUN apt-get update && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
-WORKDIR /app
-COPY package*.json .npmrc ./
-RUN npm ci
-COPY . .
-RUN npm run build
-ENV NODE_ENV=production PORT=3000
-CMD ["sh", "-c", "npx prisma migrate deploy && npx next start -p $PORT"]
+## Docker
+A multi-stage `Dockerfile` and a `docker-compose.yml` (Postgres + app) are included:
+
+```bash
+cp .env.example .env.staging     # fill in values; DATABASE_URL is set by compose
+docker compose up --build        # http://localhost:3000
+docker compose exec app npm run admin:create -- you@domain
 ```
+The container runs `prisma migrate deploy` before starting; when running several replicas, run
+migrations as a separate release step instead. If Docker Hub rate-limits you, build with
+`--build-arg NODE_IMAGE=public.ecr.aws/docker/library/node:22-slim`.
+*The image could not be built in the development sandbox (registry access blocked), so the
+Dockerfile is unverified — build it once in CI or locally before relying on it.*
+
+## Error reporting
+`src/instrumentation.ts` logs every unhandled server error as structured JSON with the request path,
+route and the digest users see on the error page. Set `ERROR_WEBHOOK_URL` to also POST a short alert
+(e.g. a Slack incoming webhook). A full error tracker (Sentry, etc.) can be added in the same hook.
 
 ## Not covered
 Custom domains per organisation (planned premium feature), multi-region failover, CDN image resizing.

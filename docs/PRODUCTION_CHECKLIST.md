@@ -10,7 +10,9 @@ The application is **not** production-ready until every item below is checked. I
 - [ ] S3-compatible bucket + CDN; `STORAGE_PUBLIC_BASE_URL` set **(external)**
 - [ ] Scheduler hitting `/api/cron/tick` every 5 minutes; alert on missed runs
 - [ ] Health check and log shipping with the alerts in `docs/OPERATIONS.md`
-- [ ] Error tracking (e.g. Sentry) integrated — *not yet done*
+- [x] Unhandled server errors logged with digests (`src/instrumentation.ts`), optional `ERROR_WEBHOOK_URL` alert
+- [ ] Full error tracker (e.g. Sentry) connected **(external)**
+- [ ] Docker image built and smoke-tested in CI (could not be built in the dev sandbox)
 
 ## Email
 - [ ] Resend account, sending domain with SPF, DKIM and DMARC **(external)**
@@ -48,14 +50,17 @@ The application is **not** production-ready until every item below is checked. I
 - [ ] Independent penetration test **(external)**
 - [ ] Review CSP `'unsafe-inline'` for scripts (nonce-based CSP would remove it)
 - [ ] Decide whether to require email verification before joining communities
-- [ ] Add MFA for owners, finance administrators and platform staff — *not implemented*
-- [ ] Purge job for `EmailOutbox` and audit-log retention policy — *not implemented*
+- [x] Two-factor authentication; required for platform staff in production; optional requirement for elevated organisation roles
+- [ ] Enable "require two-factor for administrators" in pilot organisations and brief owners
+- [x] Retention purge jobs (email outbox, notifications, join intents, realtime events, audit log)
+- [ ] Retention periods confirmed by legal counsel **(external)**
 
 ## Accessibility & UX
 - [x] Labelled form fields, visible focus, skip link, keyboard-operable controls, reduced motion
 - [x] Mobile layout checks in Playwright (no horizontal overflow, touch target size)
-- [ ] Manual screen-reader pass (NVDA/VoiceOver) and axe audit of key pages
-- [ ] Colour-contrast audit including organisation accent colours (accent is not validated for contrast)
+- [x] Automated axe WCAG 2.1 A/AA scan of 24 public, member, admin and finance pages (passing)
+- [x] Organisation accent colours must have ≥ 4.5:1 contrast with white text
+- [ ] Manual screen-reader pass (NVDA/VoiceOver), including the live meeting room
 
 ## Legal
 - [ ] Privacy policy, terms, community guidelines and fundraising disclosures reviewed by counsel

@@ -18,6 +18,7 @@ import {
   timezoneSchema,
 } from "@/lib/validation";
 import { DEFAULT_GIFTS } from "../gifts/defaults";
+import { isAccessibleAccent } from "@/lib/color";
 
 const RESERVED_SLUGS = new Set(["app", "admin", "api", "platform", "login", "register", "pricing", "new", "settings", "c", "o", "www", "support", "help"]);
 
@@ -43,7 +44,9 @@ export const orgProfileSchema = z.object({
     .trim()
     .optional()
     .transform((v) => v || undefined)
-    .refine((v) => !v || /^#[0-9a-fA-F]{6}$/.test(v), { error: "Use a hex colour like #5b3a8c." }),
+    .refine((v) => !v || /^#[0-9a-fA-F]{6}$/.test(v), { error: "Use a hex colour like #5b3a8c." })
+    // Accent backgrounds carry white text; refuse colours that would make buttons unreadable.
+    .refine((v) => !v || !/^#[0-9a-fA-F]{6}$/.test(v) || isAccessibleAccent(v), { error: "This colour is too light for white text. Choose a darker shade (contrast of at least 4.5:1)." }),
 });
 
 const createOrgSchema = orgProfileSchema.extend({

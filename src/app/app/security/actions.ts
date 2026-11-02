@@ -18,7 +18,7 @@ export async function beginMfaAction(_: ActionState, fd: FormData): Promise<Acti
 export async function confirmMfaAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return withUser(fd, async (u) => {
     const codes = await confirmMfaEnrolment(u.id, formToObject(fd), (await cookies()).get(SESSION_COOKIE)?.value);
-    revalidatePath("/app", "layout");
+    // No revalidation here: re-rendering the page would unmount the one-time recovery codes.
     return { ok: true, message: "Two-factor authentication is on. Other devices have been signed out.", data: { codes } };
   });
 }

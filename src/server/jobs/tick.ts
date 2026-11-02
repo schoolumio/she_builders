@@ -46,13 +46,33 @@ export async function sendMeetingReminders(now = new Date()) {
   return sent;
 }
 
-async function cleanup(now: Date) {
-  const [sessions, tokens, buckets] = await Promise.all([
+/** Retention periods in days (see docs/DATABASE.md). Financial records are never purged here. */
+export const RETENTION_DAYS = {
+  authTokens: 7,
+  rateLimitBuckets: 1,
+  emailOutbox: 30, // sent or permanently failed messages (contain notification text)
+  readNotifications: 180,
+  joinIntents: 365,
+  realtimeEvents: 90,
+  simulatorRecords: 30,
+  auditLog: Number(process.env.AUDIT_RETENTION_DAYS ?? 730),
+};
+
+/** Deletes expired security records and data past its retention period. Returns rows removed. */
+export async function cleanup(now: Date) {
+  const before = (days: number) => DateTime.fromJSDate(now).minus({ days }).toJSDate();
+  const results = await Promise.all([
     db.session.deleteMany({ where: { expiresAt: { lt: now } } }),
-    db.authToken.deleteMany({ where: { expiresAt: { lt: DateTime.fromJSDate(now).minus({ days: 7 }).toJSDate() } } }),
-    db.rateLimitBucket.deleteMany({ where: { windowStart: { lt: DateTime.fromJSDate(now).minus({ days: 1 }).toJSDate() } } }),
+    db.authToken.deleteMany({ where: { expiresAt: { lt: before(RETENTION_DAYS.authTokens) } } }),
+    db.rateLimitBucket.deleteMany({ where: { windowStart: { lt: before(RETENTION_DAYS.rateLimitBuckets) } } }),
+    db.emailOutbox.deleteMany({ where: { status: { in: ["SENT", "FAILED"] }, createdAt: { lt: before(RETENTION_DAYS.emailOutbox) } } }),
+    db.notification.deleteMany({ where: { readAt: { not: null }, createdAt: { lt: before(RETENTION_DAYS.readNotifications) } } }),
+    db.meetingJoinIntent.deleteMany({ where: { createdAt: { lt: before(RETENTION_DAYS.joinIntents) } } }),
+    db.realtimeWebhookEvent.deleteMany({ where: { receivedAt: { lt: before(RETENTION_DAYS.realtimeEvents) } } }),
+    db.simulatorRecord.deleteMany({ where: { updatedAt: { lt: before(RETENTION_DAYS.simulatorRecords) } } }),
+    db.auditLog.deleteMany({ where: { createdAt: { lt: before(RETENTION_DAYS.auditLog) } } }),
   ]);
-  return sessions.count + tokens.count + buckets.count;
+  return results.reduce((s, r) => s + r.count, 0);
 }
 
 /** Idempotent scheduled work. Safe to run every 5 minutes from cron or a platform scheduler. */

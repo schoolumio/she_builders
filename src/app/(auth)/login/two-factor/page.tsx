@@ -3,7 +3,8 @@ import { cookies } from "next/headers";
 import { ActionForm, SubmitButton, TextField } from "@/components/ui/form";
 import { Card, Notice } from "@/components/ui/card";
 import { safeNextPath } from "@/lib/urls";
-import { MFA_COOKIE, twoFactorAction } from "../../actions";
+import { MFA_COOKIE } from "@/server/auth/cookie-names";
+import { twoFactorAction } from "../../actions";
 
 export const metadata = { title: "Two-factor verification" };
 

@@ -26,7 +26,14 @@ export function MfaSetup({ begin, confirm }: { begin: Action; confirm: Action })
   const [started, beginAction, beginning] = useActionState(begin, null);
   const [confirmed, confirmAction, confirming] = useActionState(confirm, null);
   const codes = confirmed?.data?.codes as string[] | undefined;
-  if (codes) return <div className="space-y-3"><Message state={confirmed} /><RecoveryCodes codes={codes} /></div>;
+  if (codes)
+    return (
+      <div className="space-y-3">
+        <Message state={confirmed} />
+        <RecoveryCodes codes={codes} />
+        <a href="/app/security" className={buttonClass("secondary")}>I&apos;ve saved my codes</a>
+      </div>
+    );
   const data = started?.data as { secret: string; qrSvg: string } | undefined;
   if (!data) {
     return (

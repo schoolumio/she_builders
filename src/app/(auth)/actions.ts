@@ -6,13 +6,12 @@ import { runAction, type ActionState } from "@/server/action";
 import { authenticate, changePassword, registerUser, requestPasswordReset, resetPassword, sendVerificationEmail } from "@/server/auth/service";
 import { cookieOptions, getCurrentUser, requestMeta, startSession } from "@/server/auth/current-user";
 import { completeMfaChallenge, createMfaChallenge } from "@/server/auth/mfa";
+import { MFA_COOKIE } from "@/server/auth/cookie-names";
 import { invalidateSessionToken, SESSION_COOKIE } from "@/server/auth/session";
 import { formToObject } from "@/lib/validation";
 import { safeNextPath } from "@/lib/urls";
 import { UnauthenticatedError } from "@/server/errors";
 import { rateLimit } from "@/server/rate-limit";
-
-export const MFA_COOKIE = "pcp_mfa";
 
 export async function loginAction(_: ActionState, fd: FormData): Promise<ActionState> {
   let next = "/app";

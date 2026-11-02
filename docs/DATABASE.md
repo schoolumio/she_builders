@@ -64,5 +64,12 @@ settlement are separate types — see `docs/PAYMENTS.md`.
 | Rate-limit buckets | Purged after 24 hours |
 | Prayer requests, testimonies | Until deleted by the author, the author's account is deleted, or the organisation is closed |
 | Donations, ledger, refunds, disputes | Retained for statutory record-keeping (e.g. 6–7 years); donor identity removed on account deletion |
-| Audit log | 2 years recommended (no automatic purge yet) |
-| Email outbox | No automatic purge yet — add a job before launch (contains notification text) |
+| Audit log | Purged after `AUDIT_RETENTION_DAYS` (default 730) by the scheduler |
+| Email outbox | Sent / permanently failed messages purged after 30 days (pending kept for retry) |
+| Read notifications | Purged after 180 days (unread kept) |
+| WhatsApp join intents | Purged after 365 days |
+| Real-time webhook events | Purged after 90 days |
+| Payment webhook events | Retained (financial audit trail) |
+
+Retention periods live in `RETENTION_DAYS` (`src/server/jobs/tick.ts`) and are covered by
+`tests/integration/retention.test.ts`, which also asserts financial records are never purged.

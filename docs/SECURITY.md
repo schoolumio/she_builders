@@ -72,6 +72,19 @@ own prayer requests and testimonies, view their own donations, leave the organis
 - Invitations: hashed tokens, 14-day expiry, single use, bound to the invited email address.
 - Login and reset endpoints return generic messages and are rate limited per IP and per email.
 
+### Two-factor authentication (`src/server/auth/mfa.ts`, `totp.ts`)
+- TOTP per RFC 6238 (SHA-1, 30 s, 6 digits; verified against the RFC test vectors), ±1 step
+  tolerance, **replay protection** (the last accepted time step is stored and enforced atomically).
+- Secrets are AES-256-GCM encrypted at rest; ten single-use recovery codes are stored as SHA-256
+  hashes and shown once. Enabling two-factor signs out other sessions.
+- A correct password for a two-factor account yields only a 10-minute, single-use challenge cookie
+  (5 attempts), never a session. Turning two-factor off requires the password and a valid code.
+- **Platform staff** must have two-factor when `PLATFORM_REQUIRE_MFA` is true (default in
+  production); enforced on pages and in every platform service function.
+- **Organisations** may require two-factor for Owner, Admin, Finance Admin and Prayer Coordinator
+  roles (`requireMfaForAdmins`, owner-only, owner must have it enabled). Without two-factor those
+  roles are not effective — the person keeps member access and sees a banner — until they enable it.
+
 ## 4. Financial data
 - No storage of card data, CVCs, online-banking passwords, PINs or provider secret keys for
   organisations. Organisations connect through provider-hosted onboarding (Stripe) or via a
