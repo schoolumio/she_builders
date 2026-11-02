@@ -13,7 +13,7 @@ export async function createUser(overrides: Partial<User> = {}) {
   });
 }
 
-export async function createOrg(owner: User, opts: { plan?: string; slug?: string; overrides?: Partial<Organization> } = {}) {
+export async function createOrg(owner: User, opts: { plan?: string; slug?: string; overrides?: Partial<Omit<Organization, "socialLinks">> } = {}) {
   const slug = opts.slug ?? `org-${uniq()}`;
   const plan = await db.plan.findUniqueOrThrow({ where: { code: opts.plan ?? "MINISTRY" } });
   const org = await db.organization.create({

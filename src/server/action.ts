@@ -4,13 +4,9 @@ import { isAppError, ValidationError } from "./errors";
 import { errorMeta, log } from "./log";
 import { randomToken } from "./crypto";
 
-export type ActionState = {
-  ok: boolean;
-  message?: string;
-  fieldErrors?: Record<string, string>;
-  /** Echo of submitted values so forms can re-populate after validation errors. */
-  values?: Record<string, string>;
-} | null;
+import type { ActionState } from "./action-types";
+
+export type { ActionState };
 
 function echo(fd?: FormData): Record<string, string> | undefined {
   if (!fd) return undefined;
