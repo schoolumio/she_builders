@@ -1,0 +1,47 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: prayer
+          POSTGRES_PASSWORD: prayer
+          POSTGRES_DB: prayer_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U prayer" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgresql://prayer:prayer@localhost:5432/prayer_test?schema=public
+      E2E_DATABASE_URL: postgresql://prayer:prayer@localhost:5432/prayer_e2e?schema=public
+      DATABASE_URL: postgresql://prayer:prayer@localhost:5432/prayer_e2e?schema=public
+      NEXT_TELEMETRY_DISABLED: "1"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm audit --audit-level=moderate
+      - run: npm test
+      - name: Create e2e database
+        run: PGPASSWORD=prayer psql -h localhost -U prayer -d prayer_test -c "CREATE DATABASE prayer_e2e"
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-traces
+          path: test-results/

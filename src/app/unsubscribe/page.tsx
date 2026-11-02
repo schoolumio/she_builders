@@ -1,4 +1,5 @@
 import type { NotificationCategory } from "@prisma/client";
+import { redirect } from "next/navigation";
 import { BrandMark } from "@/components/brand-mark";
 import { Card, Notice } from "@/components/ui/card";
 import { verifySignedValue } from "@/server/crypto";
@@ -12,10 +13,11 @@ async function unsubscribe(formData: FormData) {
   if (!value) return;
   const [userId, category] = value.split(":") as [string, NotificationCategory];
   if (category && category in CATEGORY_LABELS) await updatePreference(userId, category, { email: false });
+  redirect("/unsubscribe?done=1");
 }
 
 export default async function UnsubscribePage({ searchParams }: { searchParams: Promise<{ t?: string; done?: string }> }) {
-  const { t } = await searchParams;
+  const { t, done } = await searchParams;
   const value = t ? verifySignedValue(t) : null;
   const category = value?.split(":")[1] as NotificationCategory | undefined;
   return (
@@ -24,7 +26,9 @@ export default async function UnsubscribePage({ searchParams }: { searchParams: 
       <main id="main" className="mx-auto mt-10 max-w-md">
         <Card className="p-6">
           <h1 className="font-serif text-2xl font-semibold text-plum-900">Email preferences</h1>
-          {!value || !category ? (
+          {done ? (
+            <Notice tone="success" className="mt-4">You&apos;ve been unsubscribed from these emails.</Notice>
+          ) : !value || !category ? (
             <Notice tone="danger" className="mt-4">This unsubscribe link is not valid.</Notice>
           ) : (
             <form action={unsubscribe} className="mt-4 space-y-4">
