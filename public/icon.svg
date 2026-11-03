@@ -1,1 +1,17 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="96" height="96" viewBox="0 0 32 32"><rect width="32" height="32" rx="9" fill="#2b1a3d"/><path d="M16 6c-1.2 3.6-4 6.4-7.6 7.6C12 14.8 14.8 17.6 16 21.2c1.2-3.6 4-6.4 7.6-7.6C20 12.4 17.2 9.6 16 6z" fill="#c49a3a"/><path d="M10 24h12" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="512" height="512" viewBox="0 0 120 120">
+  <defs>
+    <linearGradient id="g" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f7dc85"/><stop offset="0.55" stop-color="#d9ab3c"/><stop offset="1" stop-color="#b07f1f"/></linearGradient>
+    <linearGradient id="c" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#fffbea"/><stop offset="1" stop-color="#f2cf6b"/></linearGradient>
+    <radialGradient id="r" cx="60" cy="35" r="34" gradientUnits="userSpaceOnUse"><stop offset="0" stop-color="#fbe7a6" stop-opacity="0.75"/><stop offset="1" stop-color="#fbe7a6" stop-opacity="0"/></radialGradient>
+  </defs>
+  <rect width="120" height="120" rx="26" fill="#0a1033"/>
+  <g transform="translate(6 8) scale(0.9)">
+    <circle cx="60" cy="30" r="34" fill="url(#r)"/>
+    <path d="M20 80 C14 52 24 33 44 25 C33 38 30 56 31 78 Z" fill="url(#g)"/>
+    <path d="M100 80 C106 52 96 33 76 25 C87 38 90 56 89 78 Z" fill="url(#g)"/>
+    <rect x="56.5" y="12" width="7" height="64" rx="1.5" fill="url(#c)"/>
+    <rect x="40" y="26" width="40" height="7" rx="1.5" fill="url(#c)"/>
+    <path d="M24 80 Q42 72 60 79 Q78 72 96 80 L96 84 Q78 77 60 84 Q42 77 24 84 Z" fill="url(#g)"/>
+    <path d="M4 92 Q32 76 60 88 Q88 76 116 92 Q88 84 60 104 Q32 84 4 92 Z" fill="url(#g)"/>
+  </g>
+</svg>

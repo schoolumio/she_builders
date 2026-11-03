@@ -94,7 +94,7 @@ export class PaystackProvider implements PaymentProvider {
       account_number: bank.accountNumber,
       percentage_charge: 0,
       primary_contact_email: bank.contactEmail ?? input.email ?? undefined,
-      description: "Prayer Community Platform organisation",
+      description: "AltarCall organisation",
     });
     const snapshot = await this.syncAccount(sub.subaccount_code);
     return { snapshot: { ...snapshot, accountName: resolved.account_name } };

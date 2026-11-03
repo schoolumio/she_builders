@@ -21,7 +21,7 @@ export function billingProviderName(): "stripe" | "none" {
 let stripeClient: Stripe | undefined;
 function stripe() {
   if (billingProviderName() !== "stripe") throw new ConfigurationError("Online subscription billing is not configured. Contact us to change plans.");
-  stripeClient ??= new Stripe(process.env.STRIPE_SECRET_KEY!, { appInfo: { name: "Prayer Community Platform Billing" } });
+  stripeClient ??= new Stripe(process.env.STRIPE_SECRET_KEY!, { appInfo: { name: "AltarCall Billing" } });
   return stripeClient;
 }
 

@@ -52,11 +52,12 @@ function escapeHtml(s: string) {
 /** Minimal, accessible HTML wrapper. Content is plain text; links are rendered as buttons. */
 export function renderEmail(opts: { heading: string; paragraphs: string[]; action?: { label: string; url: string }; footer?: string }) {
   const text = [opts.heading, "", ...opts.paragraphs, ...(opts.action ? ["", `${opts.action.label}: ${opts.action.url}`] : []), "", opts.footer ?? `— ${brand.productName}`].join("\n");
-  const html = `<!doctype html><html><body style="margin:0;background:#faf7f2;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#2a2238">
+  const html = `<!doctype html><html><body style="margin:0;background:#f8f7f4;font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:#2a2238">
 <div style="max-width:560px;margin:0 auto;padding:32px 20px">
-<h1 style="font-size:20px;color:#3b2453;margin:0 0 16px">${escapeHtml(opts.heading)}</h1>
+<p style="font-family:Georgia,serif;font-size:22px;font-weight:600;margin:0 0 20px"><span style="color:#0e1530">${escapeHtml(brand.shortName.replace(new RegExp(`${brand.wordmarkAccent}$`), ""))}</span><span style="color:#b07f1f">${escapeHtml(brand.wordmarkAccent && brand.shortName.endsWith(brand.wordmarkAccent) ? brand.wordmarkAccent : "")}</span></p>
+<h1 style="font-size:20px;color:#0e1530;margin:0 0 16px">${escapeHtml(opts.heading)}</h1>
 ${opts.paragraphs.map((p) => `<p style="font-size:15px;line-height:1.6;margin:0 0 12px">${escapeHtml(p)}</p>`).join("")}
-${opts.action ? `<p style="margin:24px 0"><a href="${escapeHtml(opts.action.url)}" style="background:#3b2453;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">${escapeHtml(opts.action.label)}</a></p>` : ""}
+${opts.action ? `<p style="margin:24px 0"><a href="${escapeHtml(opts.action.url)}" style="background:#0e1530;color:#fff;padding:12px 20px;border-radius:8px;text-decoration:none;font-weight:600">${escapeHtml(opts.action.label)}</a></p>` : ""}
 <p style="font-size:12px;color:#6b6478;margin-top:32px">${escapeHtml(opts.footer ?? brand.productName)}</p>
 </div></body></html>`;
   return { text, html };

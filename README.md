@@ -1,12 +1,15 @@
-# Prayer Community Platform
+# AltarCall
+
+*Where prayer communities come together.*
 
 A multi-tenant SaaS platform for online prayer communities, women's ministries, church prayer
 departments, Bible study groups and fellowships: membership, WhatsApp / in-app audio / in-app
 video meetings, prayer points, confidential prayer requests, testimonies, programmes,
 community-owned fundraising and SaaS subscriptions.
 
-Built by **BridgeCodes** (a business of **Numi Innovations Ltd**). "Prayer Community Platform" is a
-working name; branding is configured in `src/config/brand.ts` / `BRAND_*` env vars.
+Built by **BridgeCodes** (a business of **Numi Innovations Ltd**). The product name, tagline and
+wordmark come from `src/config/brand.ts` / `BRAND_*` env vars; the logo mark is
+`src/components/brand-mark.tsx` (vector) with the original artwork in `public/brand/`.
 
 > **Status:** feature-complete for the initial release scope and covered by automated tests, but
 > **not yet production-ready**: live LiveKit, Paystack/Stripe, email and storage credentials,

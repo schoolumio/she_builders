@@ -5,8 +5,11 @@ import "./globals.css";
 import { brand } from "@/config/brand";
 
 export const metadata: Metadata = {
-  title: { default: brand.productName, template: `%s · ${brand.productName}` },
-  description: "A home for online prayer communities, ministries and fellowships — meetings, prayer requests, programmes and community-owned giving.",
+  metadataBase: new URL(process.env.APP_URL ?? "http://localhost:3000"),
+  title: { default: `${brand.productName} — ${brand.tagline.replace(/\.$/, "")}`, template: `%s · ${brand.productName}` },
+  description: "One secure home for prayer meetings, confidential prayer care, discipleship programmes and community-owned giving — for churches and ministries of every size.",
+  applicationName: brand.productName,
+  openGraph: { siteName: brand.productName, type: "website" },
   robots: { index: true, follow: true },
 };
 

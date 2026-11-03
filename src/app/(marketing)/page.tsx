@@ -53,7 +53,7 @@ export default function HomePage() {
         <div aria-hidden className="absolute inset-0 opacity-[0.07] [background-image:linear-gradient(rgba(255,255,255,.6)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,.6)_1px,transparent_1px)] [background-size:64px_64px] [mask-image:radial-gradient(ellipse_at_center,black,transparent_75%)]" />
         <div className="relative mx-auto grid max-w-7xl items-center gap-16 px-5 pb-28 pt-16 sm:px-8 sm:pt-20 lg:grid-cols-[1.05fr_1fr] lg:pb-32 lg:pt-28 [&>*]:min-w-0">
           <div>
-            <p className="eyebrow text-gold-400">Ministry platform for prayer &amp; community</p>
+            <p className="eyebrow text-gold-400">{brand.tagline}</p>
             <h1 className="mt-6 font-serif text-[2.6rem] font-medium leading-[1.05] sm:text-6xl lg:text-[4.25rem]">
               Shepherd every gathering. <span className="italic text-gold-400">Steward</span> every gift.
             </h1>

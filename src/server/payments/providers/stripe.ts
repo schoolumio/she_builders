@@ -35,7 +35,7 @@ export class StripeConnectProvider implements PaymentProvider {
 
   private stripe() {
     if (!this.isAvailable()) throw new ProviderError("Stripe is not configured", "Stripe is not configured on this platform.");
-    this.client ??= new Stripe(this.key, { appInfo: { name: "Prayer Community Platform" } });
+    this.client ??= new Stripe(this.key, { appInfo: { name: "AltarCall" } });
     return this.client;
   }
 

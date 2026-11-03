@@ -21,7 +21,7 @@ export type IcsEvent = { uid: string; title: string; description?: string; url?:
 
 /** Builds an RFC 5545 calendar with one VEVENT per occurrence (UTC times, so no VTIMEZONE needed). */
 export function buildIcs(calendarName: string, events: IcsEvent[]): string {
-  const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//BridgeCodes//Prayer Community Platform//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH", `X-WR-CALNAME:${esc(calendarName)}`];
+  const lines = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//BridgeCodes//AltarCall//EN", "CALSCALE:GREGORIAN", "METHOD:PUBLISH", `X-WR-CALNAME:${esc(calendarName)}`];
   const stamp = icsDate(new Date());
   for (const e of events) {
     lines.push(
