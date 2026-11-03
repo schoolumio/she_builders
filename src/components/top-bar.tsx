@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Bell } from "lucide-react";
 import { BrandMark } from "./brand-mark";
 import { Avatar } from "./ui/avatar";
 import { db } from "@/server/db";
@@ -18,10 +19,11 @@ export async function TopBar({ user }: { user: CurrentUser }) {
               Platform admin
             </Link>
           )}
-          <Link href="/app/notifications" className="relative rounded-lg px-3 py-2 text-sm font-medium text-white/80 hover:bg-white/10 hover:text-white">
-            Notifications
+          <Link href="/app/notifications" className="relative flex size-10 items-center justify-center rounded-full text-white/80 hover:bg-white/10 hover:text-white">
+            <Bell className="size-5" aria-hidden />
+            <span className="sr-only">Notifications</span>
             {unread > 0 && (
-              <span className="ml-1 rounded-full bg-gold-500 px-1.5 text-xs font-bold text-plum-950" aria-label={`${unread} unread`}>
+              <span className="absolute -right-0.5 -top-0.5 min-w-5 rounded-full bg-gold-500 px-1 text-center text-[0.68rem] font-bold leading-5 text-plum-950 ring-2 ring-plum-900" aria-label={`${unread} unread`}>
                 {unread > 99 ? "99+" : unread}
               </span>
             )}

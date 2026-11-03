@@ -179,7 +179,7 @@ export async function listPublicOrganizations(limit = 24) {
 export async function listMyOrganizations(userId: string) {
   return db.membership.findMany({
     where: { userId, status: { in: ["ACTIVE", "PENDING"] } },
-    include: { organization: { select: { id: true, slug: true, name: true, tagline: true, logoUrl: true, status: true, accentColor: true } } },
+    include: { organization: { select: { id: true, slug: true, name: true, tagline: true, logoUrl: true, coverUrl: true, status: true, accentColor: true } } },
     orderBy: { createdAt: "asc" },
   });
 }
