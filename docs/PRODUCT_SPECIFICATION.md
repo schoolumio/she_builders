@@ -151,5 +151,5 @@ See `docs/IMPLEMENTATION_PLAN.md` § "Acceptance criteria status" for the live s
 the 27 acceptance steps.
 
 ## 6. Out of scope for the initial release
-Custom domains, native mobile apps, meeting recording, browser push, WhatsApp Business API,
-AI-assisted drafting, multi-branch hierarchies, recurring donations (schema-ready, not wired).
+Custom domains, native mobile apps, meeting recording, WhatsApp Business API, AI-assisted drafting,
+multi-branch hierarchies, Paystack recurring donations.

@@ -85,6 +85,14 @@ own prayer requests and testimonies, view their own donations, leave the organis
   roles (`requireMfaForAdmins`, owner-only, owner must have it enabled). Without two-factor those
   roles are not effective — the person keeps member access and sees a banner — until they enable it.
 
+### Browser push notifications
+Web Push with VAPID keys (`src/server/push`). Subscriptions are stored per user; endpoints are
+accepted only on known browser push services (FCM, Mozilla, Apple, Windows) so the server cannot be
+used to call arbitrary URLs. Payloads are encrypted to the browser by the protocol but pass through
+the browser vendor's push service, so they carry only the notification title, a short body (≤160
+chars) and an **in-app path** (off-site links are replaced). Prayer-related notifications never
+include request content. Expired subscriptions are deleted. Users control push per category.
+
 ## 4. Financial data
 - No storage of card data, CVCs, online-banking passwords, PINs or provider secret keys for
   organisations. Organisations connect through provider-hosted onboarding (Stripe) or via a

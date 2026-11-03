@@ -49,6 +49,7 @@ export const campaignSchema = z
     allowCustomAmount: checkbox,
     allowAnonymous: checkbox,
     allowGuests: checkbox,
+    allowRecurring: checkbox,
     visibility: z.enum(["PUBLIC", "MEMBERS"]),
     startsAt: optionalDate,
     endsAt: optionalDate,
@@ -74,6 +75,7 @@ function toData(d: z.output<typeof campaignSchema>) {
     allowAnonymous: d.allowAnonymous,
     // Members-only campaigns never accept guest donors.
     allowGuests: d.visibility === "PUBLIC" && d.allowGuests,
+    allowRecurring: d.allowRecurring,
     visibility: d.visibility,
     startsAt: d.startsAt ?? null,
     endsAt: d.endsAt ?? null,

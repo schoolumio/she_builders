@@ -14,6 +14,24 @@ import { db } from "@/server/db";
 import { requirePermission } from "@/server/tenancy/context";
 import { NotFoundError, ValidationError } from "@/server/errors";
 import { storePublicImage } from "@/server/storage";
+import { importSettlements } from "@/server/payments/settlements";
+import { cancelRecurringForOrganisation } from "@/server/payments/recurring";
+
+export async function importPayoutsAction(slug: string, _: ActionState, fd: FormData) {
+  return withOrg(slug, fd, async (ctx) => {
+    const r = await importSettlements(ctx);
+    revalidatePath(`/o/${slug}/finance`, "layout");
+    return { ok: true, message: `Imported from the provider: ${r.created} new, ${r.updated} updated.` };
+  });
+}
+
+export async function cancelRecurringOrgAction(slug: string, _: ActionState, fd: FormData) {
+  return withOrg(slug, fd, async (ctx) => {
+    await cancelRecurringForOrganisation(ctx, str(fd, "id"));
+    revalidatePath(`/o/${slug}/finance/recurring`);
+    return { ok: true, message: "Recurring gift cancelled." };
+  });
+}
 
 const PROVIDERS: PaymentProviderId[] = ["PAYSTACK", "STRIPE", "SIMULATOR"];
 

@@ -1,7 +1,7 @@
 import "server-only";
 import { createHmac } from "node:crypto";
 import { safeEqual } from "../../crypto";
-import type { AccountSnapshot, BankDetails, CheckoutParams, NormalizedPaymentEvent, PaymentProvider, VerifiedPayment } from "../types";
+import type { AccountSnapshot, BankDetails, CheckoutParams, NormalizedPaymentEvent, PaymentProvider, ProviderSettlement, VerifiedPayment } from "../types";
 import { ProviderError, WebhookSignatureError } from "../types";
 
 const API = "https://api.paystack.co";
@@ -36,7 +36,7 @@ type PaystackResponse<T> = { status: boolean; message: string; data: T };
 export class PaystackProvider implements PaymentProvider {
   readonly id = "PAYSTACK" as const;
   readonly displayName = "Paystack";
-  readonly capabilities = { hostedOnboarding: false, bankDetailsForm: true, requiresPlatformReview: true, refunds: true, disputes: true, recurring: false };
+  readonly capabilities = { hostedOnboarding: false, bankDetailsForm: true, requiresPlatformReview: true, refunds: true, disputes: true, recurring: false, settlements: true };
 
   private get secret() {
     return process.env.PAYSTACK_SECRET_KEY ?? "";
@@ -175,6 +175,32 @@ export class PaystackProvider implements PaymentProvider {
   async refund(input: { reference: string; amount: number }) {
     const r = await this.call<{ id: number; status: string }>("POST", "/refund", { transaction: input.reference, amount: input.amount });
     return { providerRefundId: String(r.id), status: r.status === "processed" ? ("succeeded" as const) : ("pending" as const) };
+  }
+
+  /**
+   * Settlements to the organisation's subaccount (GET /settlement?subaccount=…).
+   * The amount paid to the bank is `effective_amount` (after fees) when present, else `total_amount`.
+   * Verify this mapping against Paystack test data before relying on it for reconciliation.
+   */
+  async listSettlements(input: { accountId: string; since: Date }): Promise<ProviderSettlement[]> {
+    const rows = await this.call<
+      { id: number; status: string; currency: string; total_amount?: number; effective_amount?: number; total_fees?: number; settlement_date?: string | null; createdAt?: string }[]
+    >("GET", `/settlement?subaccount=${encodeURIComponent(input.accountId)}&from=${encodeURIComponent(input.since.toISOString())}&perPage=100`);
+    return rows.map((r) => {
+      const st = r.status?.toLowerCase();
+      const status = st === "success" || st === "settled" ? "paid" : st === "failed" ? "failed" : "pending";
+      const date = r.settlement_date ? new Date(r.settlement_date) : null;
+      return {
+        providerSettlementId: String(r.id),
+        amount: r.effective_amount ?? r.total_amount ?? 0,
+        feeAmount: typeof r.total_fees === "number" ? r.total_fees : null,
+        currency: (r.currency ?? "NGN").toUpperCase(),
+        status,
+        providerStatus: r.status,
+        expectedAt: date,
+        settledAt: status === "paid" ? date : null,
+      } satisfies ProviderSettlement;
+    });
   }
 
   async parseWebhook(rawBody: string, headers: Headers): Promise<NormalizedPaymentEvent> {

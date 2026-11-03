@@ -28,6 +28,7 @@ See `.env.example` for every variable with explanations. Production requirements
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | Optional; in-app meetings show "not configured" without them. |
 | `PAYSTACK_SECRET_KEY` / `STRIPE_SECRET_KEY` + `STRIPE_CONNECT_WEBHOOK_SECRET` | Optional; providers without credentials are hidden. |
 | `BILLING_PROVIDER`, `STRIPE_BILLING_WEBHOOK_SECRET` | See `docs/SUBSCRIPTIONS.md`. |
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT` | Browser push. Generate once (`npx web-push generate-vapid-keys`); rotating the keys invalidates every existing browser subscription. |
 | `PAYMENTS_SIMULATOR_ENABLED` | Ignored in production (simulator always off). |
 
 Store secrets in the host's secret manager, never in the repository.

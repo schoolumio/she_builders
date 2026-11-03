@@ -6,6 +6,7 @@ import { retryPendingEmails } from "../email";
 import { materializeAllMeetings, meetingAudience } from "../meetings/service";
 import { sendPrayerFollowUps } from "../prayer/service";
 import { expireSubscriptions } from "../billing/service";
+import { scheduledSettlementImport } from "../payments/settlements";
 import { notify } from "../notifications";
 import { formatInZone } from "@/lib/time";
 
@@ -84,6 +85,7 @@ export async function runScheduledTick(now = new Date()) {
     ["prayerFollowUps", () => sendPrayerFollowUps(now)],
     ["emailsRetried", () => retryPendingEmails()],
     ["subscriptionsChanged", () => expireSubscriptions(now)],
+    ["payoutsImported", () => scheduledSettlementImport(now)],
     ["rowsCleaned", () => cleanup(now)],
   ];
   for (const [name, fn] of steps) {

@@ -19,6 +19,8 @@ import { donationReadiness } from "./connections";
 import { getCampaignForGiving, isCampaignOpen } from "./campaigns";
 import { processPaymentEvent } from "./events";
 import { ProviderError } from "./types";
+import { settledTotals } from "./settlements";
+import { createRecurringDonation } from "./recurring";
 import { checkbox, emailSchema, optionalText } from "@/lib/validation";
 import { formatMoney, platformFee, toMinorUnits } from "@/lib/money";
 import { brand } from "@/config/brand";
@@ -29,9 +31,10 @@ const startSchema = z.object({
   donorEmail: z.union([z.literal(""), emailSchema]).optional().transform((v) => v || undefined),
   anonymous: checkbox,
   message: optionalText(500),
+  frequency: z.enum(["ONE_TIME", "WEEKLY", "MONTHLY"]).optional().default("ONE_TIME"),
 });
 
-export type DonationStartResult = { reference: string };
+export type DonationStartResult = { reference: string; recurring: boolean };
 
 /**
  * Step 1 of giving: validates the amount against the campaign and records a PENDING donation.
@@ -59,6 +62,12 @@ export async function startDonation(viewer: (Actor & { email: string }) | null, 
     );
   }
 
+  if (data.frequency !== "ONE_TIME") {
+    if (!viewer) throw new ForbiddenError("Please sign in to set up a recurring gift, so you can manage or cancel it at any time.");
+    const r = await createRecurringDonation({ donor: viewer, campaign, amount, interval: data.frequency, anonymous: data.anonymous });
+    return { reference: r.reference, recurring: true } satisfies DonationStartResult;
+  }
+
   const readiness = await donationReadiness(campaign.organizationId, campaign.currency);
   if (!readiness.ready) throw new AppError(readiness.reason);
   const ent = await getEntitlements(campaign.organizationId);
@@ -81,7 +90,7 @@ export async function startDonation(viewer: (Actor & { email: string }) | null, 
       platformFeeAmount: platformFee(amount, ent.plan.platformFeeBps),
     },
   });
-  return { reference: donation.reference } satisfies DonationStartResult;
+  return { reference: donation.reference, recurring: false } satisfies DonationStartResult;
 }
 
 /** Loads a donation by its unguessable reference. Signed-in donors may only see their own. */
@@ -195,6 +204,8 @@ export async function financeSummary(ctx: OrgContext) {
     m[r.type] = r._sum.amount ?? 0;
     byCurrency.set(r.currency, m);
   }
+  const settled = await settledTotals(ctx.org.id);
+  for (const c of settled.keys()) if (!byCurrency.has(c)) byCurrency.set(c, {});
   return {
     currencies: [...byCurrency.entries()].map(([currency, t]) => {
       const gross = t.CHARGE ?? 0;
@@ -202,8 +213,9 @@ export async function financeSummary(ctx: OrgContext) {
       const platform = -(t.PLATFORM_FEE ?? 0);
       const refunds = -(t.REFUND ?? 0);
       const disputes = -((t.DISPUTE_HOLD ?? 0) + (t.DISPUTE_RELEASE ?? 0));
-      const settled = t.SETTLEMENT ?? 0;
-      return { currency, gross, processing, platform, refunds, disputes, net: gross - processing - platform - refunds - disputes, settled };
+      const paidOut = settled.get(currency)?.paid ?? 0;
+      const inTransit = settled.get(currency)?.pending ?? 0;
+      return { currency, gross, processing, platform, refunds, disputes, net: gross - processing - platform - refunds - disputes, settled: paidOut, inTransit };
     }),
     pendingCount: pending.reduce((s, p) => s + p._count, 0),
   };

@@ -54,8 +54,7 @@ available, currency supported. It is checked when a donation starts and again at
 Refunds: finance admins request them; the record is credited only when the provider confirms
 (synchronous API response or webhook) → `REFUND` ledger entry, donation `PARTIALLY_REFUNDED` /
 `REFUNDED`. Disputes: `DISPUTE_HOLD` on open, `DISPUTE_RELEASE` if won, `DISPUTE_LOSS` (zero, for
-reporting) if lost. Settlement records are modelled (`SettlementRecord`, `SETTLEMENT` ledger type) but
-**settlement ingestion is not implemented**; "net due" is never presented as money in the bank.
+reporting) if lost. Payouts are imported separately (see *Payouts* below); "net due" is never presented as money in the bank.
 
 ## Webhook endpoints
 | Endpoint | Signature |
@@ -65,6 +64,44 @@ reporting) if lost. Settlement records are modelled (`SettlementRecord`, `SETTLE
 | `/api/webhooks/simulator` | `x-simulator-signature` = HMAC-SHA256(`PAYMENTS_SIMULATOR_SECRET`). Disabled in production. |
 
 Invalid signatures → 401. Processing errors → 500 so the provider retries (processing is idempotent).
+
+## Recurring donations
+Campaigns opt in with **"Offer weekly and monthly recurring gifts"**. Recurring gifts require a
+signed-in donor (so they can always see and cancel them) and a provider that holds the schedule:
+
+| Provider | Recurring support |
+| --- | --- |
+| Stripe Connect | ✅ A Stripe **subscription created on the organisation's connected account** (Checkout `mode: subscription`, `application_fee_percent` for any disclosed platform fee). Stripe charges the donor; funds settle to the organisation. |
+| Paystack | ❌ Not offered in this release. Paystack subscriptions use Plans; whether plan charges can be split to a subaccount for this use case must be confirmed with Paystack before it is built. The option is hidden for Paystack-connected organisations. |
+| Simulator | ✅ For local testing (`/simulator` control panel: charge next period, fail a charge, cancel at provider). |
+
+Flow: give page → frequency **Monthly/Weekly** → review page (`/donations/recurring/{ref}`) shows the
+amount, frequency, fees and how to cancel → provider checkout → `recurring.activated` webhook marks
+the gift ACTIVE. Every successful charge (`invoice.paid` on Stripe) becomes its **own `Donation`
+row**, credited through the same path as one-time gifts: amount, currency and recipient compared
+with the stored record, idempotent per provider charge id, ledger entries and a receipt per charge.
+Failed charges (`invoice.payment_failed`) set PAST_DUE and notify the donor; provider cancellation
+(`customer.subscription.deleted`) sets CANCELED. Donors cancel from **My giving**; finance
+administrators can cancel from **Finance → Recurring gifts**. Cancelling calls the provider first.
+Add `invoice.paid`, `invoice.payment_failed` and `customer.subscription.deleted` to the Stripe
+Connect webhook endpoint.
+
+## Payouts (settlement import)
+Payouts are what the provider sends to the organisation's bank. They are imported into
+`SettlementRecord` (idempotent on provider + payout id; a payout can never move between
+organisations):
+
+| Provider | Source |
+| --- | --- |
+| Stripe | `payouts.list` on the connected account + `payout.*` Connect webhooks |
+| Paystack | `GET /settlement?subaccount=…` — amount mapped from `effective_amount` (falling back to `total_amount`); **verify this mapping against Paystack test data** |
+| Simulator | `/simulator` → "Create payout" (then import), "Mark paid" (webhook) |
+
+Import runs automatically from the scheduler (each verified connection at most every 6 hours) and on
+demand with **Finance → Payouts → Import**. The finance overview shows *Paid out to your bank* and
+*Payouts in transit* from provider-reported payouts only. Payout totals and donation totals can
+differ by timing and by fees deducted at settlement; payouts are not attributed to individual
+donations.
 
 ## Platform fee
 Configured per plan (`Plan.platformFeeBps`, default **0**, max 10%, editable at `/platform/plans`).

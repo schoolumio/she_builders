@@ -51,7 +51,28 @@ export type NormalizedPaymentEvent =
   | { eventId: string; kind: "refund.succeeded" | "refund.failed"; reference: string | null; providerChargeId: string | null; providerRefundId: string; amount: number; currency: string; accountId: string | null }
   | { eventId: string; kind: "dispute.opened" | "dispute.won" | "dispute.lost"; reference: string | null; providerChargeId: string | null; providerDisputeId: string; amount: number; currency: string; reason?: string | null; accountId: string | null }
   | { eventId: string; kind: "account.updated"; accountId: string }
+  | { eventId: string; kind: "recurring.activated"; reference: string | null; providerCheckoutId: string | null; providerSubscriptionId: string; accountId: string | null; nextChargeAt: Date | null }
+  | ({ eventId: string; kind: "recurring.charge_succeeded"; providerSubscriptionId: string } & VerifiedPayment)
+  | { eventId: string; kind: "recurring.charge_failed"; providerSubscriptionId: string; accountId: string | null; reason: string | null }
+  | { eventId: string; kind: "recurring.canceled"; providerSubscriptionId: string; accountId: string | null }
+  | { eventId: string; kind: "settlement.updated"; accountId: string; settlement: ProviderSettlement }
   | { eventId: string; kind: "ignored"; providerType: string };
+
+export type ProviderSettlement = {
+  providerSettlementId: string;
+  amount: number;
+  feeAmount: number | null;
+  currency: string;
+  status: "pending" | "paid" | "failed" | "canceled";
+  providerStatus: string;
+  expectedAt: Date | null;
+  settledAt: Date | null;
+};
+
+export type RecurringCheckoutParams = Omit<CheckoutParams, "platformFee"> & {
+  interval: "WEEKLY" | "MONTHLY";
+  platformFeeBps: number;
+};
 
 export type ProviderCapabilities = {
   hostedOnboarding: boolean; // provider collects KYC/bank details on its own pages
@@ -60,6 +81,7 @@ export type ProviderCapabilities = {
   refunds: boolean;
   disputes: boolean;
   recurring: boolean;
+  settlements: boolean; // provider exposes payout/settlement records we can import
 };
 
 export interface PaymentProvider {
@@ -84,6 +106,11 @@ export interface PaymentProvider {
   createCheckout(params: CheckoutParams): Promise<{ checkoutUrl: string; providerPaymentId?: string }>;
   verifyPayment(input: { reference: string; providerPaymentId?: string | null; accountId: string }): Promise<VerifiedPayment>;
   refund(input: { reference: string; providerPaymentId: string; amount: number; accountId: string }): Promise<{ providerRefundId: string; status: "pending" | "succeeded" | "failed" }>;
+  /** Recurring donations (only when capabilities.recurring). */
+  createRecurringCheckout?(params: RecurringCheckoutParams): Promise<{ checkoutUrl: string; providerCheckoutId?: string }>;
+  cancelRecurring?(input: { providerSubscriptionId: string; accountId: string }): Promise<void>;
+  /** Payouts to the organisation's bank since a date (only when capabilities.settlements). */
+  listSettlements?(input: { accountId: string; since: Date }): Promise<ProviderSettlement[]>;
   /** Verifies the webhook signature against the raw body. Throws WebhookSignatureError when invalid. */
   parseWebhook(rawBody: string, headers: Headers): Promise<NormalizedPaymentEvent>;
 }

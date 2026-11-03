@@ -24,7 +24,8 @@ end-to-end with external credentials (tested with fakes/simulator) · `[ ]` not 
 - [x] Testimonies with consent and moderation; content reports
 - [x] Notifications: in-app, email outbox with retries, preferences, unsubscribe
 - [x] Attendance: provider webhooks and host-marked; WhatsApp clicks are join intents only
-- [ ] Browser push notifications; WhatsApp Business notifications
+- [x] Browser push notifications (Phase 10)
+- [ ] WhatsApp Business notifications
 
 ## Phase 3 — Live communication
 - [~] LiveKit provider adapter (official SDK) behind `RealtimeProvider`
@@ -44,7 +45,7 @@ end-to-end with external credentials (tested with fakes/simulator) · `[ ]` not 
 - [x] Checkout with server-derived parameters, review/disclosure page
 - [x] Webhook signature verification, idempotency, tamper detection, server-side reconciliation
 - [x] Append-only ledger, receipts, refunds, disputes, finance dashboard, CSV export
-- [ ] Settlement ingestion from providers; recurring donations
+- [x] Settlement (payout) import and recurring donations — see Phase 10
 
 ## Phase 5 — Virtual gifts
 - [x] Gift catalogue management; free gifts with server-broadcast feed and rate limiting
@@ -74,6 +75,15 @@ end-to-end with external credentials (tested with fakes/simulator) · `[ ]` not 
 - [x] Structured logging of unhandled server errors with optional alert webhook
 - [~] Dockerfile and docker-compose stack (image build blocked in the sandbox; unverified)
 - [ ] Staging deployment with real provider sandboxes (needs credentials — next phase)
+
+## Phase 10 — Recurring giving, push, payouts
+- [x] Recurring donations (weekly/monthly) with donor and finance cancellation; each charge a verified, idempotent donation
+- [~] Stripe recurring (subscriptions on connected accounts) — implemented, needs Stripe test keys to verify
+- [ ] Paystack recurring — not offered until split-on-subscription is confirmed with Paystack
+- [x] Browser push notifications (VAPID), per-category preference, endpoint allow-list, expired-subscription clean-up
+- [x] Payout import (Stripe payouts, Paystack settlements, simulator), scheduler + manual import, paid-out totals
+- [~] Paystack settlement field mapping needs confirmation with Paystack test data
+- [x] 138 unit/integration tests and 18 Playwright tests passing
 
 ## Acceptance criteria status
 | # | Criterion | Status | Evidence |

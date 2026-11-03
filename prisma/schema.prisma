@@ -52,6 +52,8 @@ model User {
   deletedAt       DateTime?
 
   sessions               Session[]
+  pushSubscriptions      PushSubscription[]
+  recurringDonations     RecurringDonation[]
   tokens                 AuthToken[]
   memberships            Membership[]
   groupMemberships       GroupMembership[]
@@ -201,6 +203,7 @@ model Organization {
   refunds            Refund[]
   disputes           Dispute[]
   settlements        SettlementRecord[]
+  recurringDonations RecurringDonation[]
   gifts              VirtualGift[]
   giftEvents         GiftEvent[]
   subscription       Subscription?
@@ -871,6 +874,7 @@ model NotificationPreference {
   category NotificationCategory
   inApp    Boolean              @default(true)
   email    Boolean              @default(true)
+  push     Boolean              @default(true)
 
   @@unique([userId, category])
 }
@@ -937,12 +941,15 @@ model PaymentProviderConnection {
   platformReviewedById String?
   reviewNote        String?
   lastSyncedAt      DateTime?
+  lastSettlementSyncAt DateTime?
   disconnectedAt    DateTime?
   createdById       String
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 
-  donations Donation[]
+  donations   Donation[]
+  recurring   RecurringDonation[]
+  settlements SettlementRecord[]
 
   @@unique([provider, providerAccountId])
   @@index([organizationId, status])
@@ -988,6 +995,7 @@ model FundraisingCampaign {
   allowCustomAmount Boolean            @default(true)
   allowAnonymous    Boolean            @default(true)
   allowGuests       Boolean            @default(true)
+  allowRecurring    Boolean            @default(false)
   visibility        CampaignVisibility @default(PUBLIC)
   startsAt          DateTime?
   endsAt            DateTime?
@@ -1001,6 +1009,7 @@ model FundraisingCampaign {
 
   donations Donation[]
   updates   CampaignUpdate[]
+  recurring RecurringDonation[]
 
   @@index([organizationId, status])
 }
@@ -1062,6 +1071,8 @@ model Donation {
   receiptNumber      String?                   @unique
   receiptSentAt      DateTime?
   paidAt             DateTime?
+  recurringDonationId String? // set for each charge of a recurring donation
+  recurringDonation  RecurringDonation?        @relation(fields: [recurringDonationId], references: [id], onDelete: Restrict)
   giftId             String? // for purpose = GIFT
   occurrenceId       String? // for purpose = GIFT
   createdAt          DateTime                  @default(now())
@@ -1156,20 +1167,88 @@ model Dispute {
   @@index([organizationId])
 }
 
+enum SettlementStatus {
+  PENDING // scheduled / in transit
+  PAID // provider reports the funds were sent to the organisation's bank
+  FAILED
+  CANCELED
+}
+
+// Payouts from the provider to the organisation's bank account, imported from the provider.
 model SettlementRecord {
-  id                   String            @id @default(cuid())
+  id                   String                     @id @default(cuid())
   organizationId       String
-  organization         Organization      @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  organization         Organization               @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  connectionId         String?
+  connection           PaymentProviderConnection? @relation(fields: [connectionId], references: [id], onDelete: Restrict)
   provider             PaymentProviderId
   providerSettlementId String
-  amount               Int
+  amount               Int // amount paid out to the bank (minor units)
+  feeAmount            Int? // fees deducted at settlement, when reported
   currency             String
-  status               String
-  settledAt            DateTime?
-  createdAt            DateTime          @default(now())
+  status               SettlementStatus           @default(PENDING)
+  providerStatus       String? // raw provider status for support
+  expectedAt           DateTime? // scheduled / estimated arrival
+  settledAt            DateTime? // when the provider reported it paid
+  importedAt           DateTime                   @default(now())
+  updatedAt            DateTime                   @updatedAt
+  createdAt            DateTime                   @default(now())
 
   @@unique([provider, providerSettlementId])
-  @@index([organizationId])
+  @@index([organizationId, status])
+}
+
+enum RecurringInterval {
+  WEEKLY
+  MONTHLY
+}
+
+enum RecurringStatus {
+  PENDING_SETUP // donor has not completed the provider checkout yet
+  ACTIVE
+  PAST_DUE // the provider reported a failed charge and will retry
+  CANCELED
+}
+
+// A donor's standing instruction, held by the provider (e.g. a Stripe subscription on the
+// organisation's connected account). Each successful charge becomes its own Donation row.
+model RecurringDonation {
+  id                     String                    @id @default(cuid())
+  organizationId         String
+  organization           Organization              @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  campaignId             String
+  campaign               FundraisingCampaign       @relation(fields: [campaignId], references: [id], onDelete: Restrict)
+  connectionId           String
+  connection             PaymentProviderConnection @relation(fields: [connectionId], references: [id], onDelete: Restrict)
+  provider               PaymentProviderId
+  donorUserId            String?
+  donor                  User?                     @relation(fields: [donorUserId], references: [id], onDelete: SetNull)
+  donorName              String?
+  donorEmail             String?
+  anonymous              Boolean                   @default(false)
+  reference              String                    @unique
+  amount                 Int
+  currency               String
+  interval               RecurringInterval
+  platformFeeBps         Int                       @default(0)
+  status                 RecurringStatus           @default(PENDING_SETUP)
+  checkoutUrl            String?
+  providerCheckoutId     String?
+  providerSubscriptionId String?
+  chargesCount           Int                       @default(0)
+  lastChargeAt           DateTime?
+  nextChargeAt           DateTime?
+  failureReason          String?
+  canceledAt             DateTime?
+  canceledBy             String? // "donor" | "organisation" | "provider"
+  createdAt              DateTime                  @default(now())
+  updatedAt              DateTime                  @updatedAt
+
+  charges Donation[]
+
+  @@unique([provider, providerSubscriptionId])
+  @@index([organizationId, status])
+  @@index([donorUserId])
 }
 
 // Development/test-only state for the payment simulator provider (never used when APP_ENV=production).
@@ -1177,6 +1256,22 @@ model SimulatorRecord {
   key       String   @id // "account:<id>" | "payment:<reference>"
   data      Json     @db.JsonB
   updatedAt DateTime @updatedAt
+}
+
+// Browser push subscriptions (Web Push / VAPID). Endpoints are capability URLs: treat as secrets.
+model PushSubscription {
+  id            String    @id @default(cuid())
+  userId        String
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  endpoint      String    @unique
+  p256dh        String
+  auth          String
+  userAgent     String?
+  failureCount  Int       @default(0)
+  lastSuccessAt DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([userId])
 }
 
 // Idempotency store for provider webhooks.

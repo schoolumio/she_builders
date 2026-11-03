@@ -8,6 +8,7 @@ import { AmountPicker } from "@/components/amount-picker";
 import { getCurrentUser } from "@/server/auth/current-user";
 import { campaignTotals, getCampaignForGiving, isCampaignOpen } from "@/server/payments/campaigns";
 import { donationReadiness } from "@/server/payments/connections";
+import { recurringAvailable } from "@/server/payments/recurring";
 import { NotFoundError } from "@/server/errors";
 import { formatMoney, fromMinorUnits } from "@/lib/money";
 import { startDonationAction } from "../../actions";
@@ -21,7 +22,7 @@ export default async function GivePage({ params }: { params: Promise<{ slug: str
     if (e instanceof NotFoundError) notFound();
     throw e;
   });
-  const [totals, ready] = await Promise.all([campaignTotals(c.id), donationReadiness(c.organizationId, c.currency)]);
+  const [totals, ready, recurringOk] = await Promise.all([campaignTotals(c.id), donationReadiness(c.organizationId, c.currency), c.allowRecurring ? recurringAvailable(c.organizationId, c.currency) : Promise.resolve(false)]);
   const open = isCampaignOpen(c);
   const canGive = open && ready.ready && (user || c.allowGuests);
   return (
@@ -64,6 +65,20 @@ export default async function GivePage({ params }: { params: Promise<{ slug: str
           <ActionForm action={startDonationAction.bind(null, slug, c.id)}>
             <h2 className="font-semibold text-plum-900">Choose an amount ({c.currency})</h2>
             <AmountPicker suggestions={c.suggestedAmounts.map((a) => fromMinorUnits(a, c.currency))} currency={c.currency} allowCustom={c.allowCustomAmount} min={fromMinorUnits(c.minAmount, c.currency)} max={fromMinorUnits(c.maxAmount, c.currency)} />
+            {recurringOk && user && (
+              <fieldset>
+                <legend className="text-sm font-medium">How often?</legend>
+                <div className="mt-2 grid grid-cols-3 gap-2">
+                  {[["ONE_TIME", "One time"], ["MONTHLY", "Monthly"], ["WEEKLY", "Weekly"]].map(([v, l], i) => (
+                    <label key={v} className="flex min-h-11 items-center justify-center gap-2 rounded-lg border border-line bg-white text-sm has-[:checked]:border-plum-700 has-[:checked]:bg-violet-50">
+                      <input type="radio" name="frequency" value={v} defaultChecked={i === 0} className="size-4" /> {l}
+                    </label>
+                  ))}
+                </div>
+                <p className="mt-1 text-xs text-muted">Recurring gifts are charged by the payment provider until you cancel them in My giving.</p>
+              </fieldset>
+            )}
+            {recurringOk && !user && <p className="text-xs text-muted"><Link className="underline" href={`/login?next=/c/${slug}/give/${c.id}`}>Sign in</Link> to set up a monthly or weekly gift.</p>}
             {!user && (
               <>
                 <TextField label="Your name (optional)" name="donorName" autoComplete="name" />

@@ -32,6 +32,7 @@ export function CampaignFields({ c, defaultCurrency, currencyLocked }: { c?: Fun
       <CheckboxField name="allowCustomAmount" label="Allow donors to enter their own amount" defaultChecked={c?.allowCustomAmount ?? true} />
       <CheckboxField name="allowAnonymous" label="Allow anonymous donations" defaultChecked={c?.allowAnonymous ?? true} />
       <CheckboxField name="allowGuests" label="Allow donations without an account (public campaigns only)" defaultChecked={c?.allowGuests ?? true} />
+      <CheckboxField name="allowRecurring" label="Offer weekly and monthly recurring gifts" defaultChecked={c?.allowRecurring ?? false} hint="Available when your payment provider supports recurring payments (Stripe; not Paystack in this release). Donors must be signed in so they can cancel at any time." />
       <TextAreaField label="Terms & disclosures shown to donors (optional)" name="terms" defaultValue={c?.terms ?? ""} rows={3} />
     </>
   );

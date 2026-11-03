@@ -5,6 +5,7 @@ import { renderEmail, sendEmail } from "../email";
 import { env } from "../env";
 import { signValue } from "../crypto";
 import { brand } from "@/config/brand";
+import { sendPushToUsers } from "../push";
 
 export const CATEGORY_LABELS: Record<NotificationCategory, string> = {
   MEETINGS: "Meeting reminders and changes",
@@ -53,6 +54,11 @@ export async function notify(input: NotifyInput) {
       })),
     });
   }
+  // Browser push follows the in-app preference for the category, plus the push toggle.
+  const pushTo = users.filter((u) => alwaysOn || (prefBy.get(u.id)?.inApp !== false && prefBy.get(u.id)?.push !== false)).map((u) => u.id);
+  if (pushTo.length) {
+    await sendPushToUsers(pushTo, { title: input.title, body: input.body, link: input.link, tag: input.category }).catch(() => 0);
+  }
   if (input.email) {
     for (const u of users) {
       if (!alwaysOn && (prefBy.get(u.id)?.email === false || !u.emailVerifiedAt)) continue;
@@ -69,11 +75,11 @@ export async function notify(input: NotifyInput) {
   }
 }
 
-export async function updatePreference(userId: string, category: NotificationCategory, data: { inApp?: boolean; email?: boolean }) {
+export async function updatePreference(userId: string, category: NotificationCategory, data: { inApp?: boolean; email?: boolean; push?: boolean }) {
   if (category === "ACCOUNT") return;
   await db.notificationPreference.upsert({
     where: { userId_category: { userId, category } },
-    create: { userId, category, inApp: data.inApp ?? true, email: data.email ?? true },
+    create: { userId, category, inApp: data.inApp ?? true, email: data.email ?? true, push: data.push ?? true },
     update: data,
   });
 }

@@ -74,3 +74,4 @@ real money, LiveKit account or email provider is needed to run the tests.
 | [Deployment](docs/DEPLOYMENT.md) | Environment, hosting, cron, storage, email |
 | [Operations](docs/OPERATIONS.md) | Monitoring, backups, recovery, incidents |
 | [Production checklist](docs/PRODUCTION_CHECKLIST.md) | Everything required before launch |
+| [Local testing on Windows](docs/LOCAL_TESTING_WINDOWS.md) | Step-by-step guide for Windows `cmd` |

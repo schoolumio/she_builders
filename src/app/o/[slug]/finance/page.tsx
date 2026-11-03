@@ -33,7 +33,13 @@ export default async function FinanceOverview({ params }: { params: Promise<{ sl
               <Stat label="Refunds & disputes" value={formatMoney(c.refunds + c.disputes, c.currency)} />
               <Stat label="Net due to you" value={formatMoney(c.net, c.currency)} hint={c.platform ? `After ${formatMoney(c.platform, c.currency)} platform fees` : "No platform fees"} />
             </div>
-            <p className="mt-2 text-xs text-muted">Settlement to your bank is handled by the provider on its schedule. &ldquo;Net due&rdquo; is not money already in your bank account.</p>
+            <div className="mt-3 grid grid-cols-2 gap-3 lg:grid-cols-4">
+              <Stat label="Paid out to your bank" value={formatMoney(c.settled, c.currency)} hint="Provider-reported payouts" />
+              <Stat label="Payouts in transit" value={formatMoney(c.inTransit, c.currency)} />
+            </div>
+            <p className="mt-2 text-xs text-muted">
+              &ldquo;Net due&rdquo; is not money already in your bank. Payouts are imported from the provider — see <Link className="underline" href={`/o/${slug}/finance/payouts`}>Payouts</Link>. Payout and donation totals can differ by timing and by provider fees deducted at settlement.
+            </p>
           </div>
         ))
       )}

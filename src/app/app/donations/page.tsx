@@ -3,6 +3,10 @@ import { Card, EmptyState, PageHeader } from "@/components/ui/card";
 import { DonationStatusBadge } from "@/components/donation-status";
 import { requireUser } from "@/server/auth/current-user";
 import { listMyDonations } from "@/server/payments/donations";
+import { INTERVAL_LABEL, listMyRecurringDonations } from "@/server/payments/recurring";
+import { Badge } from "@/components/ui/badge";
+import { InlineAction } from "@/components/ui/inline-action";
+import { cancelRecurringAction } from "../../c/[slug]/actions";
 import { formatMoney } from "@/lib/money";
 import { formatInZone } from "@/lib/time";
 
@@ -10,10 +14,30 @@ export const metadata = { title: "My giving" };
 
 export default async function MyDonationsPage() {
   const user = await requireUser("/app/donations");
-  const rows = await listMyDonations(user.id);
+  const [rows, recurring] = await Promise.all([listMyDonations(user.id), listMyRecurringDonations(user.id)]);
   return (
     <>
       <PageHeader title="My giving" description="Donations and paid gifts you made while signed in, with their provider-confirmed status." />
+      {recurring.length > 0 && (
+        <section aria-labelledby="recurring-h" className="mb-8">
+          <h2 id="recurring-h" className="mb-3 font-semibold text-plum-900">Recurring gifts</h2>
+          <div className="space-y-3">
+            {recurring.map((r) => (
+              <Card key={r.id} className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="font-medium">{formatMoney(r.amount, r.currency)} {INTERVAL_LABEL[r.interval]} to {r.organization.name}</p>
+                  <p className="text-sm text-muted">{r.campaign.title} · {r.chargesCount} payment{r.chargesCount === 1 ? "" : "s"} made{r.nextChargeAt && r.status !== "CANCELED" ? ` · next around ${formatInZone(r.nextChargeAt, user.timezone, "d LLL")}` : ""}</p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge tone={r.status === "ACTIVE" ? "success" : r.status === "PAST_DUE" ? "danger" : "neutral"}>{r.status === "PAST_DUE" ? "payment failed" : r.status.toLowerCase()}</Badge>
+                  <Link href={`/donations/recurring/${r.reference}`} className="text-sm text-plum-700 underline">Details</Link>
+                  {(r.status === "ACTIVE" || r.status === "PAST_DUE") && <InlineAction action={cancelRecurringAction} fields={{ id: r.id }} variant="danger" confirm="Cancel this recurring gift?">Cancel</InlineAction>}
+                </div>
+              </Card>
+            ))}
+          </div>
+        </section>
+      )}
       {rows.length === 0 ? (
         <EmptyState title="No donations yet" />
       ) : (

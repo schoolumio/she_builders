@@ -30,7 +30,7 @@ export async function updateProfileAction(_: ActionState, fd: FormData): Promise
 export async function updatePreferencesAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return withUser(fd, async (user) => {
     for (const category of ["MEETINGS", "ANNOUNCEMENTS", "PRAYER", "PROGRAMMES", "FUNDRAISING"] as NotificationCategory[]) {
-      await updatePreference(user.id, category, { inApp: fd.get(`${category}:inApp`) === "on", email: fd.get(`${category}:email`) === "on" });
+      await updatePreference(user.id, category, { inApp: fd.get(`${category}:inApp`) === "on", email: fd.get(`${category}:email`) === "on", push: fd.get(`${category}:push`) === "on" });
     }
     return { ok: true, message: "Notification preferences saved." };
   });

@@ -7,6 +7,8 @@ import { requestToJoin } from "@/server/members/service";
 import { createCheckout, startDonation } from "@/server/payments/donations";
 import { UnauthenticatedError } from "@/server/errors";
 import { formToObject } from "@/lib/validation";
+import { revalidatePath } from "next/cache";
+import { cancelMyRecurringDonation, createRecurringCheckout } from "@/server/payments/recurring";
 
 export async function joinAction(orgId: string, slug: string, _: ActionState, fd: FormData): Promise<ActionState> {
   let active = false;
@@ -22,14 +24,36 @@ export async function joinAction(orgId: string, slug: string, _: ActionState, fd
 }
 
 export async function startDonationAction(slug: string, campaignId: string, _: ActionState, fd: FormData): Promise<ActionState> {
-  let reference = "";
+  let target = "";
   const res = await runAction(fd, async () => {
     const user = await getCurrentUser();
     const r = await startDonation(user, slug, campaignId, formToObject(fd), await requestMeta());
-    reference = r.reference;
+    target = r.recurring ? `/donations/recurring/${r.reference}` : `/donations/${r.reference}`;
   });
-  if (res?.ok) redirect(`/donations/${reference}`);
+  if (res?.ok) redirect(target);
   return res;
+}
+
+export async function payRecurringAction(reference: string, _: ActionState, fd: FormData): Promise<ActionState> {
+  let url = "";
+  const res = await runAction(fd, async () => {
+    const user = await getCurrentUser();
+    if (!user) throw new UnauthenticatedError();
+    url = await createRecurringCheckout(reference, user.id);
+  });
+  if (res?.ok && url) redirect(url);
+  return res;
+}
+
+export async function cancelRecurringAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return runAction(fd, async () => {
+    const user = await getCurrentUser();
+    if (!user) throw new UnauthenticatedError();
+    await cancelMyRecurringDonation(user.id, String(fd.get("id") ?? ""));
+    revalidatePath("/app/donations");
+    revalidatePath("/donations", "layout");
+    return { ok: true, message: "Your recurring gift has been cancelled. No further payments will be taken." };
+  });
 }
 
 export async function payDonationAction(reference: string, _: ActionState, fd: FormData): Promise<ActionState> {

@@ -1,6 +1,6 @@
 import "server-only";
 import Stripe from "stripe";
-import type { AccountSnapshot, CheckoutParams, NormalizedPaymentEvent, PaymentProvider, VerifiedPayment } from "../types";
+import type { AccountSnapshot, CheckoutParams, NormalizedPaymentEvent, PaymentProvider, ProviderSettlement, RecurringCheckoutParams, VerifiedPayment } from "../types";
 import { ProviderError, WebhookSignatureError } from "../types";
 
 /**
@@ -14,7 +14,7 @@ import { ProviderError, WebhookSignatureError } from "../types";
 export class StripeConnectProvider implements PaymentProvider {
   readonly id = "STRIPE" as const;
   readonly displayName = "Stripe";
-  readonly capabilities = { hostedOnboarding: true, bankDetailsForm: false, requiresPlatformReview: false, refunds: true, disputes: true, recurring: false };
+  readonly capabilities = { hostedOnboarding: true, bankDetailsForm: false, requiresPlatformReview: false, refunds: true, disputes: true, recurring: true, settlements: true };
   private client?: Stripe;
 
   private get key() {
@@ -89,6 +89,64 @@ export class StripeConnectProvider implements PaymentProvider {
       );
       if (!session.url) throw new ProviderError("Stripe returned no checkout URL");
       return { checkoutUrl: session.url, providerPaymentId: session.id };
+    } catch (e) {
+      throw toProviderError(e);
+    }
+  }
+
+  /** Recurring donation: a Stripe subscription created directly on the organisation's connected account. */
+  async createRecurringCheckout(p: RecurringCheckoutParams) {
+    try {
+      const session = await this.stripe().checkout.sessions.create(
+        {
+          mode: "subscription",
+          client_reference_id: p.reference,
+          customer_email: p.donorEmail,
+          line_items: [
+            {
+              quantity: 1,
+              price_data: {
+                currency: p.currency.toLowerCase(),
+                unit_amount: p.amount,
+                recurring: { interval: p.interval === "WEEKLY" ? "week" : "month" },
+                product_data: { name: p.description.slice(0, 250) },
+              },
+            },
+          ],
+          subscription_data: {
+            ...(p.platformFeeBps > 0 ? { application_fee_percent: p.platformFeeBps / 100 } : {}),
+            metadata: { ...p.metadata, reference: p.reference },
+          },
+          metadata: { ...p.metadata, reference: p.reference },
+          success_url: p.successUrl,
+          cancel_url: p.cancelUrl,
+        },
+        { stripeAccount: p.accountId, idempotencyKey: `recurring:${p.reference}` },
+      );
+      if (!session.url) throw new ProviderError("Stripe returned no checkout URL");
+      return { checkoutUrl: session.url, providerCheckoutId: session.id };
+    } catch (e) {
+      throw toProviderError(e);
+    }
+  }
+
+  async cancelRecurring(input: { providerSubscriptionId: string; accountId: string }) {
+    try {
+      await this.stripe().subscriptions.cancel(input.providerSubscriptionId, {}, { stripeAccount: input.accountId });
+    } catch (e) {
+      throw toProviderError(e);
+    }
+  }
+
+  /** Payouts from the connected account's Stripe balance to its bank account. */
+  async listSettlements(input: { accountId: string; since: Date }): Promise<ProviderSettlement[]> {
+    try {
+      const out: ProviderSettlement[] = [];
+      for await (const p of this.stripe().payouts.list({ created: { gte: Math.floor(input.since.getTime() / 1000) }, limit: 100 }, { stripeAccount: input.accountId })) {
+        out.push(settlementFromPayout(p));
+        if (out.length >= 500) break;
+      }
+      return out;
     } catch (e) {
       throw toProviderError(e);
     }
@@ -186,8 +244,64 @@ export function verifiedFromSession(s: Stripe.Checkout.Session, accountId: strin
   };
 }
 
+export function settlementFromPayout(p: Stripe.Payout): ProviderSettlement {
+  const status = p.status === "paid" ? "paid" : p.status === "failed" ? "failed" : p.status === "canceled" ? "canceled" : "pending";
+  const arrival = p.arrival_date ? new Date(p.arrival_date * 1000) : null;
+  return { providerSettlementId: p.id, amount: p.amount, feeAmount: null, currency: p.currency.toUpperCase(), status, providerStatus: p.status, expectedAt: arrival, settledAt: status === "paid" ? arrival : null };
+}
+
+/** Subscription id on an invoice across Stripe API versions (top-level before 2025, under `parent` after). */
+function invoiceSubscriptionId(inv: Stripe.Invoice): string | null {
+  const legacy = (inv as unknown as { subscription?: string | { id: string } | null }).subscription;
+  if (legacy) return typeof legacy === "string" ? legacy : legacy.id;
+  const sub = (inv as unknown as { parent?: { subscription_details?: { subscription?: string | { id: string } } } }).parent?.subscription_details?.subscription;
+  return sub ? (typeof sub === "string" ? sub : sub.id) : null;
+}
+
 export function normaliseStripeEvent(event: Stripe.Event): NormalizedPaymentEvent {
   const accountId = event.account ?? null;
+  if (event.type === "checkout.session.completed" && event.data.object.mode === "subscription") {
+    const s = event.data.object;
+    const sub = typeof s.subscription === "string" ? s.subscription : (s.subscription?.id ?? null);
+    if (!sub) return { eventId: event.id, kind: "ignored", providerType: event.type };
+    return { eventId: event.id, kind: "recurring.activated", reference: s.client_reference_id ?? s.metadata?.reference ?? null, providerCheckoutId: s.id, providerSubscriptionId: sub, accountId, nextChargeAt: null };
+  }
+  switch (event.type) {
+    case "invoice.paid": {
+      const inv = event.data.object;
+      const sub = invoiceSubscriptionId(inv);
+      if (!sub) return { eventId: event.id, kind: "ignored", providerType: event.type };
+      const paidAt = inv.status_transitions?.paid_at ? new Date(inv.status_transitions.paid_at * 1000) : new Date();
+      return {
+        eventId: event.id,
+        kind: "recurring.charge_succeeded",
+        providerSubscriptionId: sub,
+        status: "succeeded",
+        reference: "",
+        providerPaymentId: inv.id ?? null,
+        providerChargeId: inv.id ?? null,
+        amount: inv.amount_paid,
+        currency: inv.currency.toUpperCase(),
+        accountId,
+        processingFee: null,
+        paidAt,
+      };
+    }
+    case "invoice.payment_failed": {
+      const sub = invoiceSubscriptionId(event.data.object);
+      if (!sub) return { eventId: event.id, kind: "ignored", providerType: event.type };
+      return { eventId: event.id, kind: "recurring.charge_failed", providerSubscriptionId: sub, accountId, reason: "The card payment failed; Stripe will retry." };
+    }
+    case "customer.subscription.deleted":
+      return { eventId: event.id, kind: "recurring.canceled", providerSubscriptionId: event.data.object.id, accountId };
+    case "payout.created":
+    case "payout.updated":
+    case "payout.paid":
+    case "payout.failed":
+    case "payout.canceled":
+      if (!accountId) return { eventId: event.id, kind: "ignored", providerType: event.type };
+      return { eventId: event.id, kind: "settlement.updated", accountId, settlement: settlementFromPayout(event.data.object) };
+  }
   switch (event.type) {
     case "checkout.session.completed":
     case "checkout.session.async_payment_succeeded": {

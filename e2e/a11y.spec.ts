@@ -25,7 +25,7 @@ test.beforeAll(async () => {
 });
 
 const PUBLIC = ["/", "/pricing", "/communities", "/login", "/register", "/privacy", "/support"];
-const SIGNED_IN = ["/app", "/app/profile", "/app/security", "/app/notifications", `/c/${slug}`, `/o/${slug}`, `/o/${slug}/meetings`, `/o/${slug}/prayer/new`, `/o/${slug}/testimonies`, `/o/${slug}/admin`, `/o/${slug}/admin/settings`, `/o/${slug}/admin/members`, `/o/${slug}/admin/meetings/new`, `/o/${slug}/admin/content`, `/o/${slug}/admin/billing`, `/o/${slug}/finance/setup`, `/o/${slug}/finance/campaigns/new`];
+const SIGNED_IN = ["/app", "/app/profile", "/app/security", "/app/notifications", `/c/${slug}`, `/o/${slug}`, `/o/${slug}/meetings`, `/o/${slug}/prayer/new`, `/o/${slug}/testimonies`, `/o/${slug}/admin`, `/o/${slug}/admin/settings`, `/o/${slug}/admin/members`, `/o/${slug}/admin/meetings/new`, `/o/${slug}/admin/content`, `/o/${slug}/admin/billing`, `/o/${slug}/finance/setup`, `/o/${slug}/finance/campaigns/new`, `/o/${slug}/finance/payouts`, `/o/${slug}/finance/recurring`, "/app/donations"];
 
 async function scanAll(page: import("@playwright/test").Page, paths: string[]) {
   const problems: string[] = [];

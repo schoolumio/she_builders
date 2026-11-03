@@ -4,6 +4,8 @@ import { requireUser } from "@/server/auth/current-user";
 import { db } from "@/server/db";
 import { CATEGORY_LABELS } from "@/server/notifications";
 import { commonTimezones } from "@/lib/time";
+import { PushToggle } from "@/components/push-toggle";
+import { vapidConfig } from "@/server/push";
 import { changePasswordAction } from "../../(auth)/actions";
 import { deleteAccountAction, updatePreferencesAction, updateProfileAction } from "../actions";
 
@@ -15,6 +17,7 @@ export default async function ProfilePage() {
   const user = await requireUser("/app/profile");
   const prefs = await db.notificationPreference.findMany({ where: { userId: user.id } });
   const pref = (c: string) => prefs.find((p) => p.category === c);
+  const vapid = vapidConfig();
   return (
     <>
       <PageHeader title="Profile & settings" />
@@ -41,6 +44,7 @@ export default async function ProfilePage() {
                     <th className="py-2 pr-4 font-medium">Category</th>
                     <th className="px-2 py-2 font-medium">In app</th>
                     <th className="px-2 py-2 font-medium">Email</th>
+                    {vapid && <th className="px-2 py-2 font-medium">Browser</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -53,6 +57,13 @@ export default async function ProfilePage() {
                       <td className="px-2 py-3">
                         <input type="checkbox" name={`${c}:email`} defaultChecked={pref(c)?.email ?? true} aria-label={`${CATEGORY_LABELS[c]} by email`} className="size-5 accent-[var(--color-accent)]" />
                       </td>
+                      {vapid ? (
+                        <td className="px-2 py-3">
+                          <input type="checkbox" name={`${c}:push`} defaultChecked={pref(c)?.push ?? true} aria-label={`${CATEGORY_LABELS[c]} as browser notifications`} className="size-5 accent-[var(--color-accent)]" />
+                        </td>
+                      ) : (
+                        <td hidden><input type="hidden" name={`${c}:push`} value={pref(c)?.push === false ? "" : "on"} /></td>
+                      )}
                     </tr>
                   ))}
                 </tbody>
@@ -60,6 +71,14 @@ export default async function ProfilePage() {
             </div>
             <SubmitButton>Save preferences</SubmitButton>
           </ActionForm>
+          <div className="mt-6 border-t border-line pt-4">
+            <p className="text-sm font-medium">Browser notifications on this device</p>
+            {vapid ? (
+              <div className="mt-2"><PushToggle publicKey={vapid.publicKey} /></div>
+            ) : (
+              <p className="mt-1 text-sm text-muted">Browser notifications are not configured on this platform yet.</p>
+            )}
+          </div>
         </Card>
 
         <Card>

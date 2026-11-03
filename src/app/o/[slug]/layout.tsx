@@ -56,6 +56,8 @@ export default async function OrgLayout({ children, params }: { children: React.
         ...(p.has("finance.manage") ? [{ href: `${base}/finance/setup`, label: "Payment account" }] : []),
         { href: `${base}/finance/campaigns`, label: "Campaigns" },
         ...(p.has("finance.view") ? [{ href: `${base}/finance/donations`, label: "Donations" }] : []),
+        ...(p.has("finance.view") ? [{ href: `${base}/finance/recurring`, label: "Recurring gifts" }] : []),
+        ...(p.has("finance.view") ? [{ href: `${base}/finance/payouts`, label: "Payouts" }] : []),
       ],
     });
   }

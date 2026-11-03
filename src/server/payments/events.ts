@@ -8,6 +8,10 @@ import { canTransition } from "./status";
 import type { NormalizedPaymentEvent, VerifiedPayment } from "./types";
 import { syncConnectionByAccount } from "./connections";
 import { getPaymentProvider } from "./providers";
+import { applySettlement } from "./settlements";
+import { nextChargeAfter } from "./recurring";
+import { notify } from "../notifications";
+import { formatMoney, platformFee } from "@/lib/money";
 
 export type EventOutcome = "processed" | "duplicate" | "ignored" | "not_found" | "mismatch" | "no_op";
 
@@ -147,6 +151,109 @@ async function applyDispute(d: DonationWithConnection, ev: Extract<NormalizedPay
   return "processed";
 }
 
+// ---------------------------------------------------------------------------------------------
+// Recurring donations
+// ---------------------------------------------------------------------------------------------
+
+async function findRecurring(provider: PaymentProviderId, providerSubscriptionId: string) {
+  return db.recurringDonation.findUnique({
+    where: { provider_providerSubscriptionId: { provider, providerSubscriptionId } },
+    include: { connection: true, organization: { select: { slug: true, name: true } } },
+  });
+}
+
+async function onRecurringActivated(provider: PaymentProviderId, ev: Extract<NormalizedPaymentEvent, { kind: "recurring.activated" }>): Promise<EventOutcome> {
+  if (!ev.reference) return "not_found";
+  const r = await db.recurringDonation.findUnique({ where: { reference: ev.reference }, include: { connection: true } });
+  if (!r || r.provider !== provider) return "not_found";
+  if (ev.accountId && ev.accountId !== r.connection.providerAccountId) {
+    log.error("payments.recurring_recipient_mismatch", { recurringId: r.id });
+    return "mismatch";
+  }
+  if (r.status !== "PENDING_SETUP") return "no_op";
+  await db.recurringDonation.update({ where: { id: r.id }, data: { status: "ACTIVE", providerSubscriptionId: ev.providerSubscriptionId, nextChargeAt: ev.nextChargeAt } });
+  await audit({ organizationId: r.organizationId, action: "payments.recurring_activated", targetType: "RecurringDonation", targetId: r.id });
+  return "processed";
+}
+
+/** Each successful charge becomes its own Donation, credited through the same verified path as one-time gifts. */
+async function onRecurringCharge(provider: PaymentProviderId, ev: Extract<NormalizedPaymentEvent, { kind: "recurring.charge_succeeded" }>): Promise<EventOutcome> {
+  const r = await findRecurring(provider, ev.providerSubscriptionId);
+  if (!r) return "not_found";
+  if (!ev.providerPaymentId) return "ignored";
+  if (r.status === "PENDING_SETUP") {
+    // The charge can arrive before the activation event; activate now.
+    await db.recurringDonation.update({ where: { id: r.id }, data: { status: "ACTIVE" } });
+  }
+  const existing = await db.donation.findUnique({ where: { provider_providerPaymentId: { provider, providerPaymentId: ev.providerPaymentId } }, include: { connection: true } });
+  let d = existing;
+  if (!d) {
+    try {
+      d = await db.donation.create({
+        data: {
+          organizationId: r.organizationId,
+          campaignId: r.campaignId,
+          connectionId: r.connectionId,
+          provider,
+          purpose: "DONATION",
+          recurringDonationId: r.id,
+          donorUserId: r.donorUserId,
+          donorName: r.donorName,
+          donorEmail: r.donorEmail,
+          anonymous: r.anonymous,
+          reference: `don_${randomToken(18)}`,
+          providerPaymentId: ev.providerPaymentId,
+          providerChargeId: ev.providerChargeId,
+          currency: r.currency,
+          amount: r.amount, // the server record, compared below with what the provider charged
+          platformFeeAmount: platformFee(r.amount, r.platformFeeBps),
+        },
+        include: { connection: true },
+      });
+    } catch {
+      return "duplicate"; // concurrent delivery created it first
+    }
+  }
+  if (d.status === "SUCCEEDED") return "no_op";
+  const outcome = await markSucceeded(d, ev, ev.eventId);
+  if (outcome === "processed") {
+    const paidAt = ev.paidAt ?? new Date();
+    await db.recurringDonation.update({
+      where: { id: r.id },
+      data: { status: "ACTIVE", chargesCount: { increment: 1 }, lastChargeAt: paidAt, nextChargeAt: nextChargeAfter(paidAt, r.interval), failureReason: null },
+    });
+  }
+  return outcome;
+}
+
+async function onRecurringFailed(provider: PaymentProviderId, ev: Extract<NormalizedPaymentEvent, { kind: "recurring.charge_failed" }>): Promise<EventOutcome> {
+  const r = await findRecurring(provider, ev.providerSubscriptionId);
+  if (!r) return "not_found";
+  if (r.status === "CANCELED") return "no_op";
+  await db.recurringDonation.update({ where: { id: r.id }, data: { status: "PAST_DUE", failureReason: ev.reason?.slice(0, 300) ?? "Payment failed" } });
+  if (r.donorUserId) {
+    await notify({
+      userIds: [r.donorUserId],
+      organizationId: r.organizationId,
+      category: "FUNDRAISING",
+      title: `Your ${r.interval === "WEEKLY" ? "weekly" : "monthly"} gift to ${r.organization.name} didn't go through`,
+      body: `The payment of ${formatMoney(r.amount, r.currency)} failed. The payment provider may retry; you can also update your card or cancel from My giving.`,
+      link: "/app/donations",
+      email: true,
+    });
+  }
+  return "processed";
+}
+
+async function onRecurringCanceled(provider: PaymentProviderId, ev: Extract<NormalizedPaymentEvent, { kind: "recurring.canceled" }>): Promise<EventOutcome> {
+  const r = await findRecurring(provider, ev.providerSubscriptionId);
+  if (!r) return "not_found";
+  if (r.status === "CANCELED") return "no_op";
+  await db.recurringDonation.update({ where: { id: r.id }, data: { status: "CANCELED", canceledAt: new Date(), canceledBy: "provider", nextChargeAt: null } });
+  await audit({ organizationId: r.organizationId, action: "payments.recurring_canceled", targetType: "RecurringDonation", targetId: r.id, metadata: { by: "provider" } });
+  return "processed";
+}
+
 /**
  * Processes a verified provider event exactly once. Callers must have verified the signature
  * (provider.parseWebhook) or obtained the data from a server-to-server verification call.
@@ -197,6 +304,23 @@ export async function processPaymentEvent(providerId: PaymentProviderId, ev: Nor
       await syncConnectionByAccount(providerId, ev.accountId);
       outcome = "processed";
       break;
+    case "recurring.activated":
+      outcome = await onRecurringActivated(providerId, ev);
+      break;
+    case "recurring.charge_succeeded":
+      outcome = await onRecurringCharge(providerId, ev);
+      break;
+    case "recurring.charge_failed":
+      outcome = await onRecurringFailed(providerId, ev);
+      break;
+    case "recurring.canceled":
+      outcome = await onRecurringCanceled(providerId, ev);
+      break;
+    case "settlement.updated": {
+      const conn = await db.paymentProviderConnection.findUnique({ where: { provider_providerAccountId: { provider: providerId, providerAccountId: ev.accountId } } });
+      outcome = conn ? ((await applySettlement(conn, ev.settlement)) === "mismatch" ? "mismatch" : "processed") : "not_found";
+      break;
+    }
     case "ignored":
       outcome = "ignored";
   }
