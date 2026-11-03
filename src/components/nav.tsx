@@ -35,7 +35,7 @@ export function SideNav({ sections, label, header }: { sections: NavSection[]; l
         {header}
         {sections.map((s, i) => (
           <div key={i}>
-            {s.title && <p className="mb-1 px-3 text-xs font-semibold uppercase tracking-wider text-muted">{s.title}</p>}
+            {s.title && <p className="eyebrow mb-2 px-3 text-[0.68rem] text-muted">{s.title}</p>}
             <ul className="space-y-0.5">
               {s.items.map((item) => {
                 const active = current?.href === item.href;
@@ -44,7 +44,10 @@ export function SideNav({ sections, label, header }: { sections: NavSection[]; l
                     <Link
                       href={item.href}
                       aria-current={active ? "page" : undefined}
-                      className={cn("block rounded-lg px-3 py-2 text-sm", active ? "bg-violet-100 font-semibold text-plum-900" : "text-ink hover:bg-violet-50")}
+                      className={cn(
+                        "relative block rounded-lg px-3 py-2 text-[0.9rem] transition-colors",
+                        active ? "bg-surface font-semibold text-plum-900 shadow-[var(--shadow-card)] before:absolute before:inset-y-2 before:left-0 before:w-[3px] before:rounded-full before:bg-gold-500" : "text-ink/80 hover:bg-surface/70 hover:text-plum-900",
+                      )}
                     >
                       {item.label}
                     </Link>

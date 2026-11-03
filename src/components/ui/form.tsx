@@ -91,7 +91,7 @@ export function Field({ label, name, hint, required, className, children }: Fiel
 }
 
 const inputClass =
-  "block w-full rounded-lg border border-line bg-white px-3 py-2.5 text-sm text-ink shadow-sm placeholder:text-muted/70 focus:border-violet-500 aria-[invalid=true]:border-danger min-h-11 sm:min-h-10";
+  "block w-full rounded-xl border border-line bg-white px-3.5 py-2.5 text-[0.95rem] text-ink shadow-[0_1px_2px_rgba(14,21,48,0.04)] transition-colors placeholder:text-muted/70 hover:border-plum-700/30 focus:border-violet-500 aria-[invalid=true]:border-danger min-h-11";
 
 export function TextField({ label, name, hint, required, className, defaultValue, ...input }: Omit<FieldProps, "children"> & React.InputHTMLAttributes<HTMLInputElement>) {
   return (

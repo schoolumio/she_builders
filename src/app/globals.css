@@ -2,32 +2,38 @@
 
 /* Design tokens. Brand colours are configurable; organisations override --color-accent. */
 @theme {
-  --color-canvas: #faf7f2;
+  /* Neutrals: warm ivory paper and cool ink */
+  --color-canvas: #f8f7f4;
   --color-surface: #ffffff;
-  --color-ink: #2a2238;
-  --color-muted: #615a6e;
-  --color-line: #e7dfd3;
-  --color-plum-950: #1f1230;
-  --color-plum-900: #2b1a3d;
-  --color-plum-800: #3b2453;
-  --color-plum-700: #4e3170;
-  --color-violet-600: #6a4aa8;
-  --color-violet-500: #7c5cbf;
-  --color-violet-100: #efe9f8;
-  --color-violet-50: #f7f3fc;
+  --color-ink: #171a2b;
+  --color-muted: #5b6070;
+  --color-line: #e5e3dd;
+  /* Primary: deep midnight navy (token names kept for compatibility) */
+  --color-plum-950: #070b1d;
+  --color-plum-900: #0e1530;
+  --color-plum-800: #18224a;
+  --color-plum-700: #233166;
+  --color-violet-600: #34478f;
+  --color-violet-500: #4a5fae;
+  --color-violet-100: #e7eaf5;
+  --color-violet-50: #f3f5fb;
+  /* Accent: restrained liturgical gold */
   --color-gold-600: #7a5b14;
-  --color-gold-500: #c49a3a;
-  --color-gold-100: #f8efd9;
-  --color-success: #23683f;
-  --color-success-bg: #e5f3ea;
-  --color-warning: #8a5a00;
-  --color-warning-bg: #fdf1d8;
-  --color-danger: #a3241c;
-  --color-danger-bg: #fbe7e5;
-  --color-accent: var(--org-accent, #4e3170);
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
-  --font-serif: ui-serif, Georgia, Cambria, "Times New Roman", serif;
-  --radius-card: 0.875rem;
+  --color-gold-500: #c5a14a;
+  --color-gold-400: #d9bd72;
+  --color-gold-100: #f6efdc;
+  --color-success: #1f6b43;
+  --color-success-bg: #e6f2eb;
+  --color-warning: #85570a;
+  --color-warning-bg: #fbf0d9;
+  --color-danger: #a2271f;
+  --color-danger-bg: #fbe8e6;
+  --color-accent: var(--org-accent, #18224a);
+  --font-sans: "Inter Variable", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --font-serif: "Fraunces Variable", ui-serif, Georgia, "Times New Roman", serif;
+  --radius-card: 1rem;
+  --shadow-card: 0 1px 2px rgba(14, 21, 48, 0.04), 0 8px 24px -12px rgba(14, 21, 48, 0.12);
+  --shadow-lift: 0 2px 4px rgba(14, 21, 48, 0.06), 0 24px 48px -20px rgba(14, 21, 48, 0.28);
 }
 
 html {
@@ -38,6 +44,21 @@ body {
   background: var(--color-canvas);
   color: var(--color-ink);
   font-family: var(--font-sans);
+  font-feature-settings: "cv11", "ss01";
+  text-rendering: optimizeLegibility;
+}
+
+/* Display type: Fraunces at a large optical size reads as a refined book face. */
+.font-serif {
+  font-variation-settings: "opsz" 96, "SOFT" 30;
+  letter-spacing: -0.015em;
+}
+
+.eyebrow {
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
 }
 
 /* Visible, consistent keyboard focus everywhere. */

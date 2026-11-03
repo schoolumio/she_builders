@@ -1,4 +1,6 @@
 import type { Metadata, Viewport } from "next";
+import "@fontsource-variable/inter";
+import "@fontsource-variable/fraunces/full.css";
 import "./globals.css";
 import { brand } from "@/config/brand";
 
@@ -8,7 +10,7 @@ export const metadata: Metadata = {
   robots: { index: true, follow: true },
 };
 
-export const viewport: Viewport = { themeColor: "#2b1a3d", width: "device-width", initialScale: 1 };
+export const viewport: Viewport = { themeColor: "#0e1530", width: "device-width", initialScale: 1 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (

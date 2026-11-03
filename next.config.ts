@@ -37,6 +37,8 @@ const csp = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // Hide the floating Next.js dev badge so local demos look like the real product.
+  devIndicators: false,
   serverExternalPackages: ["@prisma/client"],
   // Image uploads (logos, covers, campaign images) are up to 2 MB plus multipart overhead.
   experimental: { serverActions: { bodySizeLimit: "3mb" } },
