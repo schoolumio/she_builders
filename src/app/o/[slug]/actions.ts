@@ -73,7 +73,7 @@ export async function groupMembershipAction(slug: string, _: ActionState, fd: Fo
   return withOrg(slug, fd, async (ctx) => {
     if (str(fd, "op") === "join") await joinGroup(ctx, str(fd, "groupId"));
     else await leaveGroup(ctx, str(fd, "groupId"));
-    revalidatePath(`/o/${slug}/groups`);
+    revalidatePath(`/o/${slug}/groups`, "layout");
   });
 }
 

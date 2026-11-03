@@ -6,8 +6,9 @@ import { useFieldState } from "./ui/form";
 type Vis = "PRIVATE" | "GROUP" | "ORGANIZATION";
 
 /** Visibility picker that always shows, in plain words, who will see the request. */
-export function PrayerVisibilityPicker({ groups, explanations, moderated }: { groups: { id: string; name: string }[]; explanations: Record<Vis, string>; moderated: boolean }) {
-  const [vis, setVis] = useState<Vis>("PRIVATE");
+export function PrayerVisibilityPicker({ groups, explanations, moderated, defaultGroupId }: { groups: { id: string; name: string }[]; explanations: Record<Vis, string>; moderated: boolean; defaultGroupId?: string }) {
+  const preselect = defaultGroupId && groups.some((g) => g.id === defaultGroupId) ? defaultGroupId : undefined;
+  const [vis, setVis] = useState<Vis>(preselect ? "GROUP" : "PRIVATE");
   const groupErr = useFieldState("groupId").error;
   const options: { value: Vis; label: string; disabled?: boolean }[] = [
     { value: "PRIVATE", label: "Private — prayer coordinators only" },
@@ -26,7 +27,7 @@ export function PrayerVisibilityPicker({ groups, explanations, moderated }: { gr
       {vis === "GROUP" && (
         <div>
           <label htmlFor="groupId" className="text-sm font-medium">Group</label>
-          <select id="groupId" name="groupId" className="mt-1 block w-full rounded-lg border border-line bg-white px-3 py-2.5 text-sm" aria-invalid={groupErr ? true : undefined}>
+          <select id="groupId" name="groupId" defaultValue={preselect} className="mt-1 block w-full rounded-lg border border-line bg-white px-3 py-2.5 text-sm" aria-invalid={groupErr ? true : undefined}>
             {groups.map((g) => (
               <option key={g.id} value={g.id}>{g.name}</option>
             ))}

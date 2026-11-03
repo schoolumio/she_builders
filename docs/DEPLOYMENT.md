@@ -25,6 +25,7 @@ See `.env.example` for every variable with explanations. Production requirements
 | `CRON_SECRET` | Long random string. |
 | `EMAIL_DRIVER=resend`, `RESEND_API_KEY`, `EMAIL_FROM` | |
 | `STORAGE_DRIVER=s3`, `S3_*`, `STORAGE_PUBLIC_BASE_URL` | Public base URL is also added to the CSP `img-src`. |
+| `STORAGE_DRIVER=database` | Alternative for demos/staging on hosts without a disk (Vercel): images stored in Postgres, served from `/api/files`. Use S3 for production scale. |
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | Optional; in-app meetings show "not configured" without them. |
 | `PAYSTACK_SECRET_KEY` / `STRIPE_SECRET_KEY` + `STRIPE_CONNECT_WEBHOOK_SECRET` | Optional; providers without credentials are hidden. |
 | `BILLING_PROVIDER`, `STRIPE_BILLING_WEBHOOK_SECRET` | See `docs/SUBSCRIPTIONS.md`. |
@@ -46,8 +47,9 @@ Then:
 2. Configure webhooks: LiveKit → `/api/webhooks/livekit`; Paystack → `/api/webhooks/paystack`;
    Stripe Connect → `/api/webhooks/stripe/connect`; Stripe Billing → `/api/webhooks/stripe/billing`.
 3. Schedule `/api/cron/tick` every 5 minutes with `Authorization: Bearer $CRON_SECRET`:
-   - Vercel: `vercel.json` already declares the cron (every-5-minute crons need a paid Vercel plan;
-     Vercel sends the `CRON_SECRET` bearer automatically when the env var is set).
+   - Vercel: `vercel.json` declares a once-a-day cron so it deploys on the free Hobby plan. On Pro,
+     change it to `*/5 * * * *`; on Hobby, add an external 5-minute scheduler (see
+     [DEPLOY_VERCEL.md](DEPLOY_VERCEL.md)). Vercel sends the `CRON_SECRET` bearer automatically.
    - Elsewhere: `*/5 * * * * curl -fsS -X POST -H "Authorization: Bearer $CRON_SECRET" https://APP_URL/api/cron/tick`.
 4. Health check: `GET /api/health` (200 = DB reachable).
 5. Verify headers (CSP, HSTS) and run through `docs/PRODUCTION_CHECKLIST.md`.

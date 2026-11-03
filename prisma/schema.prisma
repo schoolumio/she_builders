@@ -1495,3 +1495,12 @@ model PlatformSetting {
   updatedAt DateTime @updatedAt
   updatedById String?
 }
+
+/// Small public images (logos, covers) when STORAGE_DRIVER=database — for hosts without a writable disk.
+model StoredFile {
+  key         String   @id
+  contentType String
+  body        Bytes
+  size        Int
+  createdAt   DateTime @default(now())
+}

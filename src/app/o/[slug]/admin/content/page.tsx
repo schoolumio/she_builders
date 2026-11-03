@@ -10,7 +10,8 @@ import { archiveAnnouncementAction, deletePrayerPointAction, saveAnnouncementAct
 
 export const metadata = { title: "Announcements & prayer points" };
 
-export default async function ContentPage({ params }: { params: Promise<{ slug: string }> }) {
+export default async function ContentPage({ params, searchParams }: { params: Promise<{ slug: string }>; searchParams: Promise<{ group?: string }> }) {
+  const { group } = await searchParams;
   const { slug } = await params;
   const ctx = await pageOrgContext(slug, "content.publish");
   const [announcements, points, groups] = await Promise.all([
@@ -28,7 +29,7 @@ export default async function ContentPage({ params }: { params: Promise<{ slug: 
             <ActionForm action={saveAnnouncementAction.bind(null, slug)} className="mt-3" resetOnSuccess>
               <TextField label="Title" name="title" required maxLength={160} />
               <TextAreaField label="Message" name="body" rows={5} required />
-              <SelectField label="Audience" name="groupId" options={[{ value: "", label: "Everyone" }, ...groups.map((g) => ({ value: g.id, label: g.name }))]} />
+              <SelectField label="Audience" name="groupId" defaultValue={group ?? ""} options={[{ value: "", label: "Everyone" }, ...groups.map((g) => ({ value: g.id, label: g.name }))]} />
               <CheckboxField name="pinned" label="Pin to the top" />
               <CheckboxField name="publish" label="Publish now and notify members" hint="Leave unticked to save as a draft." />
               <SubmitButton>Save</SubmitButton>

@@ -24,6 +24,7 @@ async function main() {
   if (isProd || process.env.SEED_DEMO === "0") return;
   if (await db.organization.findUnique({ where: { slug: "sample-prayer-circle" } })) {
     console.log("• Sample data already present");
+    await seedSampleGroupContent();
     return;
   }
 
@@ -109,9 +110,54 @@ async function main() {
       hosts: { create: [{ userId: host.id, role: "HOST" }] },
     },
   });
+  await seedSampleGroupContent();
   console.log("✓ Sample organisation created: /o/sample-prayer-circle");
   console.log(`  Sample logins (password ${password}): owner@, coordinator@, finance@, host@, member@ sample.test`);
   console.log("  Run `npm run cron:tick` to generate meeting occurrences.");
+}
+
+/**
+ * Content shared only with the sample group, so joining it shows something. Idempotent: safe to
+ * re-run against a database that was seeded before this existed.
+ */
+async function seedSampleGroupContent() {
+  const org = await db.organization.findUnique({ where: { slug: "sample-prayer-circle" } });
+  if (!org) return;
+  const group = await db.communityGroup.findFirst({ where: { organizationId: org.id, name: "Morning Intercessors (sample)" } });
+  if (!group) return;
+  if (await db.meeting.findFirst({ where: { organizationId: org.id, groupId: group.id } })) return;
+  const user = (email: string) => db.user.findUniqueOrThrow({ where: { email } });
+  const [owner, coordinator, member] = await Promise.all([user("owner@sample.test"), user("coordinator@sample.test"), user("member@sample.test")]);
+  const today = DateTime.now().setZone(org.timezone).toISODate()!;
+  await db.communityGroup.update({ where: { id: group.id }, data: { description: "Early-morning intercession before work. Sample group for demonstrations." } });
+  await db.groupMembership.updateMany({ where: { groupId: group.id, userId: coordinator.id }, data: { role: "LEADER" } });
+  await db.meeting.create({
+    data: {
+      organizationId: org.id,
+      title: "Morning intercession (sample)",
+      description: "Group-only WhatsApp call. Sample data.",
+      mode: "WHATSAPP",
+      visibility: "GROUP",
+      groupId: group.id,
+      externalUrl: "https://chat.whatsapp.com/SAMPLEGROUPLINK",
+      externalInstructions: "Join the group chat and tap the call button at 5:30am.",
+      timezone: org.timezone,
+      startDate: today,
+      startTime: "05:30",
+      durationMinutes: 30,
+      frequency: "WEEKLY",
+      byWeekday: [1, 2, 3, 4, 5],
+      createdById: coordinator.id,
+      hosts: { create: [{ userId: coordinator.id, role: "HOST" }] },
+    },
+  });
+  await db.announcement.create({
+    data: { organizationId: org.id, groupId: group.id, title: "This week's focus (sample)", body: "We are praying through Psalm 91 this week. Sample announcement visible only to this group.", status: "PUBLISHED", publishedAt: new Date(), authorId: owner.id },
+  });
+  await db.prayerRequest.create({
+    data: { organizationId: org.id, authorId: member.id, title: "Job interview on Friday (sample)", body: "Please pray for calm and favour. Sample request shared only with the Morning Intercessors.", visibility: "GROUP", groupId: group.id },
+  });
+  console.log("✓ Sample group content added (meeting, announcement, prayer request)");
 }
 
 main()
