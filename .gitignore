@@ -3,7 +3,7 @@ node_modules/
 out/
 build/
 coverage/
-storage/
+/storage/
 playwright-report/
 test-results/
 blob-report/
