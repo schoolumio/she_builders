@@ -1,7 +1,7 @@
 import "server-only";
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import { GetObjectCommand, NoSuchKey, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { randomToken } from "../crypto";
 import { db } from "../db";
 import { env } from "../env";
@@ -56,10 +56,30 @@ class DatabaseDriver implements StorageDriver {
   }
 }
 
+/**
+ * Neon Object Storage: a private, branch-scoped bucket declared in neon.ts. Credentials, endpoint
+ * and region come from the AWS_* variables `neon deploy` / `neon env pull` provide; Neon requires
+ * path-style addressing. The bucket stays private and images are served through /api/files.
+ */
+let neonClient: S3Client | null = null;
+function neonStorage() {
+  neonClient ??= new S3Client({ forcePathStyle: true });
+  return { client: neonClient, bucket: process.env.NEON_STORAGE_BUCKET || "assets" };
+}
+
+class NeonDriver implements StorageDriver {
+  async putPublic(key: string, body: Buffer, contentType: string) {
+    const { client, bucket } = neonStorage();
+    await client.send(new PutObjectCommand({ Bucket: bucket, Key: `public/${key}`, Body: body, ContentType: contentType, CacheControl: "public, max-age=31536000, immutable" }));
+    return `/api/files/${key}`;
+  }
+}
+
 function driver(): StorageDriver {
   if (process.env.STORAGE_DRIVER === "s3") return new S3Driver();
+  if (process.env.STORAGE_DRIVER === "neon") return new NeonDriver();
   if (process.env.STORAGE_DRIVER === "database") return new DatabaseDriver();
-  if (env.isProduction) throw new Error("STORAGE_DRIVER=s3 (or database) is required in production");
+  if (env.isProduction) throw new Error("STORAGE_DRIVER must be s3, neon or database in production");
   return new LocalDriver();
 }
 
@@ -74,9 +94,21 @@ export async function storePublicImage(file: File, prefix: string): Promise<stri
   return driver().putPublic(key, buf, type.mime);
 }
 
-/** Local and database drivers: read a public file served from /api/files (path traversal safe). */
+/** Local, database and Neon drivers: read a public file served from /api/files (path traversal safe). */
 export async function readLocalPublicFile(key: string): Promise<{ body: Buffer; type: ImageType } | null> {
   if (!/^[a-z0-9/_-]+\.(png|jpg|webp)$/i.test(key) || key.includes("..")) return null;
+  if (process.env.STORAGE_DRIVER === "neon") {
+    const { client, bucket } = neonStorage();
+    try {
+      const res = await client.send(new GetObjectCommand({ Bucket: bucket, Key: `public/${key}` }));
+      const body = Buffer.from((await res.Body?.transformToByteArray()) ?? []);
+      const type = sniffImage(body);
+      return type ? { body, type } : null;
+    } catch (e) {
+      if (e instanceof NoSuchKey) return null;
+      throw e;
+    }
+  }
   if (process.env.STORAGE_DRIVER === "database") {
     const row = await db.storedFile.findUnique({ where: { key } });
     if (!row) return null;

@@ -37,7 +37,13 @@ deploys a project's **production branch** (usually `main`). Pick one:
 
    Both look like:
    `postgresql://neondb_owner:PASSWORD@ep-xxxx-pooler.eu-central-1.aws.neon.tech/neondb?sslmode=require`
-4. Add `&pgbouncer=true` to the end of the **pooled** string. Prisma needs this flag behind a pooler.
+
+> **Already set up with the Neon CLI?** This repository is linked to the Neon project `altarcall`
+> (`neon.ts` + `.neon`). Running `neon deploy` in the project folder provisions the database, Neon
+> Auth and the `assets` storage bucket, and writes these variables into your `.env`:
+> `DATABASE_URL` (pooled), `DATABASE_URL_UNPOOLED` (direct), `AWS_ACCESS_KEY_ID`,
+> `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL_S3`, `AWS_REGION`, `NEON_AUTH_BASE_URL`,
+> `NEON_AUTH_JWKS_URL`. Copy the values from there instead of the Console.
 
 ## 3. Create the tables and sample data (from your PC)
 
@@ -47,7 +53,7 @@ In cmd, in the project folder:
 git pull
 npm install
 
-rem Use the DIRECT Neon string here (no -pooler). Keep the quotes; they stop cmd breaking on "&".
+rem Use the DIRECT Neon string (DATABASE_URL_UNPOOLED, no -pooler). Keep the quotes; they stop cmd breaking on "&".
 set "DATABASE_URL=postgresql://neondb_owner:PASSWORD@ep-xxxx.eu-central-1.aws.neon.tech/neondb?sslmode=require"
 
 npx prisma migrate deploy
@@ -90,10 +96,11 @@ Use the first for `APP_ENCRYPTION_KEY`, the second for `CRON_SECRET` and the thi
    | --- | --- |
    | `APP_ENV` | `staging` |
    | `APP_URL` | `https://altarcall-demo.vercel.app` (your project name, no trailing slash) |
-   | `DATABASE_URL` | the **pooled** Neon string ending in `&pgbouncer=true` |
+   | `DATABASE_URL` | the **pooled** Neon string (host contains `-pooler`) |
    | `APP_ENCRYPTION_KEY` | first secret from step 3 |
    | `CRON_SECRET` | second secret |
-   | `STORAGE_DRIVER` | `database` (stores uploaded logos and cover images in Postgres) |
+   | `STORAGE_DRIVER` | `neon` (logos and cover images go to the Neon `assets` bucket) |
+   | `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_ENDPOINT_URL_S3`, `AWS_REGION` | the four Neon Object Storage values from `.env` |
    | `EMAIL_DRIVER` | `log` (emails appear in Vercel logs). See step 7 for real email. |
    | `EMAIL_FROM` | `AltarCall <no-reply@example.com>` |
    | `PAYMENTS_SIMULATOR_ENABLED` | `true` |
@@ -174,11 +181,10 @@ npm run admin:create -- you@yourdomain.com
 | Symptom | Fix |
 | --- | --- |
 | Build fails with `Environment variable not found: DATABASE_URL` | Add `DATABASE_URL` in Vercel → Settings → Environment Variables (all environments), then redeploy. |
-| Pages error with `prepared statement "s0" already exists` | The pooled string is missing `&pgbouncer=true`. |
 | `The table ... does not exist` | Step 3 (`npx prisma migrate deploy`) wasn't run against this Neon database. |
 | Email links or payment "return to site" go to the wrong address | Fix `APP_URL` (check `https://` and spelling, no trailing slash), then redeploy. Always share the main `….vercel.app` address, not a preview-deployment URL. |
 | No meetings on the calendar | Run the `curl` command in step 5. |
-| Uploading a logo fails with a storage error | Set `STORAGE_DRIVER=database` and redeploy. |
+| Uploading a logo fails with a storage error | Check `STORAGE_DRIVER=neon` and all four `AWS_*` values, then redeploy. Without Neon storage, `STORAGE_DRIVER=database` keeps images in Postgres instead. |
 | `curl` returns `Unauthorized` | The bearer value must exactly match `CRON_SECRET` in Vercel. |
 
 ## Other hosts

@@ -25,6 +25,7 @@ See `.env.example` for every variable with explanations. Production requirements
 | `CRON_SECRET` | Long random string. |
 | `EMAIL_DRIVER=resend`, `RESEND_API_KEY`, `EMAIL_FROM` | |
 | `STORAGE_DRIVER=s3`, `S3_*`, `STORAGE_PUBLIC_BASE_URL` | Public base URL is also added to the CSP `img-src`. |
+| `STORAGE_DRIVER=neon`, `AWS_*`, `NEON_STORAGE_BUCKET` | Neon Object Storage (private bucket declared in `neon.ts`); images are served through `/api/files`. |
 | `STORAGE_DRIVER=database` | Alternative for demos/staging on hosts without a disk (Vercel): images stored in Postgres, served from `/api/files`. Use S3 for production scale. |
 | `LIVEKIT_URL`, `LIVEKIT_API_KEY`, `LIVEKIT_API_SECRET` | Optional; in-app meetings show "not configured" without them. |
 | `PAYSTACK_SECRET_KEY` / `STRIPE_SECRET_KEY` + `STRIPE_CONNECT_WEBHOOK_SECRET` | Optional; providers without credentials are hidden. |
