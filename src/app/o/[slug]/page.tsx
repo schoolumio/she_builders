@@ -4,12 +4,13 @@ import { ArrowRight, BookOpen, CalendarDays, HandHeart, Megaphone, MessageCircle
 import type { MeetingMode } from "@prisma/client";
 import { Avatar } from "@/components/ui/avatar";
 import { PostCard } from "@/components/feed/post-card";
+import { SessionCard } from "@/components/feed/session-card";
 import { pageOrgContext } from "@/server/page";
 import { getCurrentUser } from "@/server/auth/current-user";
 import { listUpcomingOccurrences, isOccurrenceJoinable } from "@/server/meetings/service";
 import { listProgrammes, PROGRAMME_TYPE_LABELS } from "@/server/programmes/service";
 import { getEntitlements } from "@/server/billing/entitlements";
-import { FEED_FILTERS, getFeed, type FeedFilter } from "@/server/social/service";
+import { FEED_FILTERS, getFeed, getSessionHighlights, type FeedFilter } from "@/server/social/service";
 import { can } from "@/server/tenancy/context";
 import { db } from "@/server/db";
 import { isValidTimezone } from "@/lib/time";
@@ -22,7 +23,7 @@ const MODE: Record<MeetingMode, { label: string; icon: LucideIcon }> = {
   VIDEO: { label: "Video", icon: Video },
 };
 
-const FILTER_LABELS: Record<FeedFilter, string> = { all: "Everything", prayer: "Prayer requests", testimonies: "Testimonies", announcements: "Announcements" };
+const FILTER_LABELS: Record<FeedFilter, string> = { all: "Everything", prayer: "Prayer requests", testimonies: "Testimonies", sessions: "Prayer sessions", announcements: "Announcements" };
 
 function greeting(hour: number) {
   if (hour < 12) return "Good morning";
@@ -58,8 +59,10 @@ export default async function OrgHome({ params, searchParams }: { params: Promis
   const isAdmin = can(ctx, "org.settings") || can(ctx, "members.manage");
   const canAnnounce = can(ctx, "content.publish");
 
-  const [feed, occurrences, programmes, groups, stats] = await Promise.all([
+  const showSessions = !before && (filter === "all" || filter === "sessions");
+  const [feed, highlights, occurrences, programmes, groups, stats] = await Promise.all([
     getFeed(ctx, { before, filter, prayerEnabled: prayerOn }),
+    showSessions ? getSessionHighlights(ctx) : Promise.resolve([]),
     listUpcomingOccurrences(ctx, { days: 7, take: 8 }),
     programmesOn ? listProgrammes(ctx) : Promise.resolve([]),
     db.groupMembership.findMany({
@@ -82,6 +85,9 @@ export default async function OrgHome({ params, searchParams }: { params: Promis
   const myProgrammes = programmes.filter((p) => p.enrollments.length > 0).slice(0, 2);
   const filterHref = (f: FeedFilter) => (f === "all" ? `/o/${slug}` : `/o/${slug}?filter=${f}`);
   const next = occurrences[0];
+  // Live and starting-soon sessions, plus the next upcoming one so members can say they're interested.
+  const urgent = highlights.filter((h) => h.state !== "upcoming");
+  const featured = filter === "sessions" ? highlights : [...urgent, ...highlights.filter((h) => h.state === "upcoming").slice(0, 1)].slice(0, 3);
 
   return (
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_20rem]">
@@ -122,6 +128,12 @@ export default async function OrgHome({ params, searchParams }: { params: Promis
           </ul>
         </section>
 
+        {featured.length > 0 && (
+          <section aria-label="Prayer sessions" className="space-y-3">
+            {featured.map((h) => <SessionCard key={h.id} s={h} slug={slug} tz={tz} meId={ctx.actor.id} />)}
+          </section>
+        )}
+
         {/* Composer */}
         <section aria-label="Share with the community" className="rounded-2xl border border-line/80 bg-surface p-4 shadow-[var(--shadow-card)]">
           <div className="flex items-center gap-3">
@@ -159,7 +171,7 @@ export default async function OrgHome({ params, searchParams }: { params: Promis
           </div>
         ) : (
           <div className="space-y-4">
-            {feed.items.map((item) => <PostCard key={`${item.kind}-${item.id}`} item={item} slug={slug} />)}
+            {feed.items.map((item) => <PostCard key={`${item.kind}-${item.id}`} item={item} slug={slug} meId={ctx.actor.id} />)}
           </div>
         )}
         {feed.nextBefore && (

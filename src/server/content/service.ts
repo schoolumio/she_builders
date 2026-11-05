@@ -1,6 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { db } from "../db";
+import { storePublicImage } from "../storage";
 import { ForbiddenError, NotFoundError, ValidationError } from "../errors";
 import { parseInput } from "../validate";
 import { audit } from "../audit";
@@ -151,10 +152,12 @@ const testimonySchema = z
     error: "Public testimonies need your explicit consent to be shown to anyone on the internet.",
   });
 
-export async function submitTestimony(ctx: OrgContext, input: unknown) {
+/** `image` is an optional photo (PNG/JPEG/WebP, checked by content, 2 MB max). */
+export async function submitTestimony(ctx: OrgContext, input: unknown, image?: File | null) {
   requireActiveOrg(ctx);
   const data = parseInput(testimonySchema, input);
   await rateLimit(`testimony:${ctx.actor.id}`, 10, 86400);
+  const imageUrl = image && image.size > 0 ? await storePublicImage(image, `orgs/${ctx.org.id}/testimonies`) : null;
   if (data.prayerRequestId) {
     const own = await db.prayerRequest.findFirst({ where: { id: data.prayerRequestId, organizationId: ctx.org.id, authorId: ctx.actor.id } });
     if (!own) throw new ValidationError("You can only link your own prayer requests.");
@@ -169,6 +172,7 @@ export async function submitTestimony(ctx: OrgContext, input: unknown) {
       body: data.body,
       audience: data.audience,
       showName: data.showName,
+      imageUrl,
       consentGivenAt: new Date(),
       moderationStatus: moderated ? "PENDING" : "APPROVED",
       publishedAt: moderated ? null : new Date(),

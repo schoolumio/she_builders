@@ -126,3 +126,106 @@ describe("amen", () => {
     expect(await db.testimonyReaction.count({ where: { testimonyId: t.id } })).toBe(1);
   });
 });
+
+// ---------------------------------------------------------------------------------------------
+// Sessions, reactions and profiles
+// ---------------------------------------------------------------------------------------------
+
+import { createMeeting, recordJoinIntent } from "@/server/meetings/service";
+import { getMemberProfile, getSessionHighlights, react, toggleSessionInterest } from "@/server/social/service";
+
+const meeting = (o: Record<string, unknown> = {}) => {
+  const d = new Date(Date.now() + 30 * 60_000);
+  return {
+    title: "Night watch", mode: "WHATSAPP", externalUrl: "https://chat.whatsapp.com/abc", format: "INTERACTIVE", visibility: "MEMBERS",
+    timezone: "UTC", startDate: d.toISOString().slice(0, 10), startTime: d.toISOString().slice(11, 16), durationMinutes: "60", frequency: "NONE", ...o,
+  };
+};
+
+async function occurrenceOf(meetingId: string) {
+  return db.meetingOccurrence.findFirstOrThrow({ where: { meetingId } });
+}
+
+describe("prayer sessions in the feed", () => {
+  it("shows who joined a live session and who is interested in an upcoming one", async () => {
+    const s = await setup();
+    const live = await occurrenceOf((await createMeeting(await ctxFor(s.owner, s.org), meeting({ title: "Live now" }))).id);
+    await db.meetingOccurrence.update({ where: { id: live.id }, data: { startsAt: new Date(Date.now() - 10 * 60_000), endsAt: new Date(Date.now() + 50 * 60_000) } });
+    await recordJoinIntent(await ctxFor(s.author, s.org), live.id);
+    await recordJoinIntent(await ctxFor(s.author, s.org), live.id); // tapping twice counts once
+    const upcoming = await occurrenceOf((await createMeeting(await ctxFor(s.owner, s.org), meeting({ title: "Later" }))).id);
+    expect(await toggleSessionInterest(await ctxFor(s.other, s.org), upcoming.id)).toBe(true);
+
+    const cards = await getSessionHighlights(await ctxFor(s.groupMate, s.org));
+    const l = cards.find((c) => c.title === "Live now")!;
+    expect(l.state).toBe("live");
+    expect(l.joined.map((p) => p.id)).toEqual([s.author.id]);
+    const u = cards.find((c) => c.title === "Later")!;
+    expect(u.state).toBe("soon");
+    expect(u.interested.map((p) => p.id)).toEqual([s.other.id]);
+    expect(u.iAmInterested).toBe(false);
+    expect(await toggleSessionInterest(await ctxFor(s.other, s.org), upcoming.id)).toBe(false);
+  });
+
+  it("keeps group sessions to the group", async () => {
+    const s = await setup();
+    const occ = await occurrenceOf((await createMeeting(await ctxFor(s.owner, s.org), meeting({ visibility: "GROUP", groupId: s.group.id }))).id);
+    expect(await getSessionHighlights(await ctxFor(s.other, s.org))).toHaveLength(0);
+    await expect(toggleSessionInterest(await ctxFor(s.other, s.org), occ.id)).rejects.toBeInstanceOf(NotFoundError);
+    expect(await getSessionHighlights(await ctxFor(s.groupMate, s.org))).toHaveLength(1);
+  });
+
+  it("puts finished sessions with participants in the timeline", async () => {
+    const s = await setup();
+    const done = await occurrenceOf((await createMeeting(await ctxFor(s.owner, s.org), meeting({ title: "Done" }))).id);
+    const empty = await occurrenceOf((await createMeeting(await ctxFor(s.owner, s.org), meeting({ title: "Nobody came" }))).id);
+    await recordJoinIntent(await ctxFor(s.author, s.org), done.id);
+    for (const o of [done, empty]) await db.meetingOccurrence.update({ where: { id: o.id }, data: { startsAt: new Date(Date.now() - 2 * 3600_000), endsAt: new Date(Date.now() - 3600_000) } });
+    const items = (await getFeed(await ctxFor(s.other, s.org), { filter: "sessions" })).items;
+    expect(items.map((i) => i.title)).toEqual(["Done"]);
+    expect(items[0]!.kind === "session" && items[0]!.joined.length === 1).toBe(true);
+  });
+});
+
+describe("reactions", () => {
+  it("allow one reaction per member, switchable and removable, summarised in the feed", async () => {
+    const s = await setup();
+    const t = await submitTestimony(await ctxFor(s.author, s.org), { title: "Healed", body: "Praise God", audience: "MEMBERS", consent: "on" });
+    expect(await react(await ctxFor(s.other, s.org), t.id, "LOVE")).toBe("LOVE");
+    expect(await react(await ctxFor(s.other, s.org), t.id, "PRAISE")).toBe("PRAISE");
+    await react(await ctxFor(s.groupMate, s.org), t.id, "PRAISE");
+    const item = (await getFeed(await ctxFor(s.other, s.org), { filter: "testimonies" })).items[0]!;
+    if (item.kind !== "testimony") throw new Error("expected testimony");
+    expect(item.reactions).toEqual({ counts: { AMEN: 0, PRAISE: 2, LOVE: 0 }, total: 2, mine: "PRAISE" });
+    expect(await react(await ctxFor(s.other, s.org), t.id, "PRAISE")).toBeNull();
+  });
+});
+
+describe("member profiles", () => {
+  it("show only posts that carry the member's name and that the viewer may read", async () => {
+    const s = await setup();
+    const actx = await ctxFor(s.author, s.org);
+    await createPrayerRequest(actx, req({ title: "Named" }));
+    await createPrayerRequest(actx, req({ title: "Anon", anonymous: "on" }));
+    await createPrayerRequest(actx, req({ title: "Private", visibility: "PRIVATE" }));
+    await createPrayerRequest(actx, req({ title: "Group only", visibility: "GROUP", groupId: s.group.id }));
+    await submitTestimony(actx, { title: "Unnamed testimony", body: "God is faithful", audience: "MEMBERS", consent: "on" });
+
+    const seenByOther = await getMemberProfile(await ctxFor(s.other, s.org), s.author.id);
+    expect(seenByOther.posts.items.map((i) => i.title)).toEqual(["Named"]);
+    expect(seenByOther.sharedGroups).toEqual([]);
+
+    const seenByGroupMate = await getMemberProfile(await ctxFor(s.groupMate, s.org), s.author.id);
+    expect(seenByGroupMate.posts.items.map((i) => i.title).sort()).toEqual(["Group only", "Named"]);
+    expect(seenByGroupMate.sharedGroups.map((g) => g.id)).toEqual([s.group.id]);
+  });
+
+  it("are not available across organisations or for former members", async () => {
+    const s = await setup();
+    const outsider = await createUser();
+    const otherOrg = await createOrg(outsider);
+    await expect(getMemberProfile(await ctxFor(outsider, otherOrg), s.author.id)).rejects.toBeInstanceOf(NotFoundError);
+    await db.membership.updateMany({ where: { userId: s.author.id, organizationId: s.org.id }, data: { status: "LEFT" } });
+    await expect(getMemberProfile(await ctxFor(s.other, s.org), s.author.id)).rejects.toBeInstanceOf(NotFoundError);
+  });
+});

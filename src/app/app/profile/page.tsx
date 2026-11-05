@@ -1,5 +1,7 @@
 import { Card, CardTitle, PageHeader } from "@/components/ui/card";
-import { ActionForm, SelectField, SubmitButton, TextField } from "@/components/ui/form";
+import { ActionForm, SelectField, SubmitButton, TextAreaField, TextField } from "@/components/ui/form";
+import { Avatar } from "@/components/ui/avatar";
+import { InlineAction } from "@/components/ui/inline-action";
 import { requireUser } from "@/server/auth/current-user";
 import { db } from "@/server/db";
 import { CATEGORY_LABELS } from "@/server/notifications";
@@ -7,7 +9,7 @@ import { commonTimezones } from "@/lib/time";
 import { PushToggle } from "@/components/push-toggle";
 import { vapidConfig } from "@/server/push";
 import { changePasswordAction } from "../../(auth)/actions";
-import { deleteAccountAction, updatePreferencesAction, updateProfileAction } from "../actions";
+import { deleteAccountAction, profilePhotoAction, updatePreferencesAction, updateProfileAction } from "../actions";
 
 export const metadata = { title: "Profile & settings" };
 
@@ -24,9 +26,19 @@ export default async function ProfilePage() {
       <div className="space-y-6">
         <Card>
           <CardTitle>Profile</CardTitle>
-          <ActionForm action={updateProfileAction} className="mt-4 max-w-lg">
+          <div className="mt-4 flex flex-wrap items-center gap-4">
+            <Avatar name={user.displayName ?? user.name} src={user.avatarUrl} size={72} />
+            <ActionForm action={profilePhotoAction} encType="multipart/form-data" className="flex flex-col gap-2 space-y-0">
+              <label htmlFor="profile-photo" className="text-sm font-medium">Profile photo</label>
+              <input id="profile-photo" type="file" name="photo" accept="image/png,image/jpeg,image/webp" className="block text-sm" />
+              <SubmitButton variant="secondary" size="sm">Upload photo</SubmitButton>
+            </ActionForm>
+            {user.avatarUrl && <InlineAction action={profilePhotoAction} fields={{ op: "remove" }} variant="ghost">Remove photo</InlineAction>}
+          </div>
+          <ActionForm action={updateProfileAction} className="mt-6 max-w-lg">
             <TextField label="Full name" name="name" defaultValue={user.name} required />
             <TextField label="Display name" name="displayName" defaultValue={user.displayName ?? ""} hint="Optional. Shown in meetings instead of your full name." />
+            <TextAreaField label="About you" name="bio" defaultValue={user.bio ?? ""} rows={3} maxLength={300} hint="Optional, up to 300 characters. Members of your communities can see it on your profile." />
             <SelectField label="Time zone" name="timezone" defaultValue={user.timezone} options={commonTimezones().map((t) => ({ value: t, label: t }))} hint="Meeting times are shown in this time zone." />
             <p className="text-sm text-muted">Email: {user.email}</p>
             <SubmitButton>Save profile</SubmitButton>

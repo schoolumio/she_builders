@@ -13,7 +13,7 @@ import { leaveOrganization } from "@/server/members/service";
 import { recordJoinIntent } from "@/server/meetings/service";
 import { safeExternalUrl } from "@/lib/urls";
 import { ValidationError } from "@/server/errors";
-import { addComment, deleteComment, toggleAmen, type PostTarget } from "@/server/social/service";
+import { addComment, deleteComment, react, toggleSessionInterest, type PostTarget } from "@/server/social/service";
 
 export async function createPrayerRequestAction(slug: string, _: ActionState, fd: FormData): Promise<ActionState> {
   let id = "";
@@ -50,8 +50,9 @@ export async function deletePrayerAction(slug: string, _: ActionState, fd: FormD
 
 export async function submitTestimonyAction(slug: string, _: ActionState, fd: FormData): Promise<ActionState> {
   return withOrg(slug, fd, async (ctx) => {
-    const t = await submitTestimony(ctx, formToObject(fd));
-    revalidatePath(`/o/${slug}/testimonies`);
+    const photo = fd.get("photo");
+    const t = await submitTestimony(ctx, formToObject(fd), photo instanceof File ? photo : null);
+    revalidatePath(`/o/${slug}`, "layout");
     return { ok: true, message: t.moderationStatus === "PENDING" ? "Thank you! Your testimony will appear once a moderator has reviewed it." : "Thank you for sharing your testimony." };
   });
 }
@@ -135,9 +136,19 @@ export async function deleteCommentAction(slug: string, _: ActionState, fd: Form
   });
 }
 
-export async function amenAction(slug: string, _: ActionState, fd: FormData): Promise<ActionState> {
+export async function reactAction(slug: string, _: ActionState, fd: FormData): Promise<ActionState> {
   return withOrg(slug, fd, async (ctx) => {
-    await toggleAmen(ctx, str(fd, "id"));
+    const type = str(fd, "type");
+    if (type !== "AMEN" && type !== "PRAISE" && type !== "LOVE") throw new ValidationError("Unknown reaction.");
+    await react(ctx, str(fd, "id"), type);
+    revalidatePath(`/o/${slug}`, "layout");
+    return { ok: true };
+  });
+}
+
+export async function sessionInterestAction(slug: string, _: ActionState, fd: FormData): Promise<ActionState> {
+  return withOrg(slug, fd, async (ctx) => {
+    await toggleSessionInterest(ctx, str(fd, "id"));
     revalidatePath(`/o/${slug}`, "layout");
     return { ok: true };
   });

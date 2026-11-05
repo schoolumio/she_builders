@@ -39,6 +39,7 @@ model User {
   timezone        String        @default("UTC")
   locale          String        @default("en")
   avatarUrl       String?
+  bio             String?
   platformRole    PlatformRole?
   status          UserStatus    @default(ACTIVE)
   // Two-factor authentication (TOTP, RFC 6238). Secrets are AES-GCM encrypted; recovery codes hashed.
@@ -63,6 +64,7 @@ model User {
   prayerAcknowledgements PrayerAcknowledgement[]
   postComments           PostComment[]
   testimonyReactions     TestimonyReaction[]
+  sessionInterests       SessionInterest[]
   prayerUpdates          PrayerRequestUpdate[]
   testimonies            Testimony[]
   notifications          Notification[]
@@ -460,6 +462,7 @@ model MeetingOccurrence {
 
   attendances MeetingAttendance[]
   joinIntents MeetingJoinIntent[]
+  interests   SessionInterest[]
   admissions  MeetingAdmission[]
   bans        MeetingRoomBan[]
   giftEvents  GiftEvent[]
@@ -723,6 +726,7 @@ model Testimony {
   body             String
   audience         TestimonyAudience @default(MEMBERS)
   showName         Boolean           @default(true)
+  imageUrl         String?
   consentGivenAt   DateTime
   moderationStatus ModerationStatus  @default(PENDING)
   moderatedById    String?
@@ -1532,14 +1536,34 @@ model PostComment {
   @@index([testimonyId, createdAt])
 }
 
-/// "Amen" on a testimony — one per member.
+enum ReactionType {
+  AMEN
+  PRAISE
+  LOVE
+}
+
+/// A reaction on a testimony — one per member; choosing another type replaces it.
 model TestimonyReaction {
-  id          String    @id @default(cuid())
+  id          String       @id @default(cuid())
   testimonyId String
-  testimony   Testimony @relation(fields: [testimonyId], references: [id], onDelete: Cascade)
+  testimony   Testimony    @relation(fields: [testimonyId], references: [id], onDelete: Cascade)
+  type        ReactionType @default(AMEN)
   userId      String
   user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   createdAt   DateTime  @default(now())
 
   @@unique([testimonyId, userId])
+}
+
+/// "I'm interested" in an upcoming prayer session, shown to others who can see that session.
+model SessionInterest {
+  id             String            @id @default(cuid())
+  organizationId String
+  occurrenceId   String
+  occurrence     MeetingOccurrence @relation(fields: [occurrenceId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt      DateTime          @default(now())
+
+  @@unique([occurrenceId, userId])
 }

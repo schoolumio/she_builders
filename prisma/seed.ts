@@ -26,6 +26,7 @@ async function main() {
     console.log("• Sample data already present");
     await seedSampleGroupContent();
     await seedSampleSocial();
+    await seedSampleProfiles();
     return;
   }
 
@@ -113,6 +114,7 @@ async function main() {
   });
   await seedSampleGroupContent();
   await seedSampleSocial();
+  await seedSampleProfiles();
   console.log("✓ Sample organisation created: /o/sample-prayer-circle");
   console.log(`  Sample logins (password ${password}): owner@, coordinator@, finance@, host@, member@ sample.test`);
   console.log("  Run `npm run cron:tick` to generate meeting occurrences.");
@@ -186,7 +188,13 @@ async function seedSampleSocial() {
   });
   await db.prayerAcknowledgement.createMany({ data: [owner, coordinator, host].map((u) => ({ requestId: exams.id, userId: u.id })) });
   await db.prayerAcknowledgement.createMany({ data: [owner, coordinator, member].map((u) => ({ requestId: mother.id, userId: u.id })) });
-  await db.testimonyReaction.createMany({ data: [owner, host, member].map((u) => ({ testimonyId: job.id, userId: u.id })) });
+  await db.testimonyReaction.createMany({
+    data: [
+      { testimonyId: job.id, userId: owner.id, type: "AMEN" as const },
+      { testimonyId: job.id, userId: host.id, type: "PRAISE" as const },
+      { testimonyId: job.id, userId: member.id, type: "LOVE" as const },
+    ],
+  });
   await db.postComment.createMany({
     data: [
       { organizationId: org.id, authorId: coordinator.id, prayerRequestId: exams.id, body: "Praying for you! Philippians 4:6-7.", createdAt: ago(2) },
@@ -195,6 +203,17 @@ async function seedSampleSocial() {
     ],
   });
   console.log("✓ Sample feed content added (prayer requests, testimony, encouragements)");
+}
+
+/** Short bios for the sample accounts (only where none is set). */
+async function seedSampleProfiles() {
+  const bios: Record<string, string> = {
+    "owner@sample.test": "Leads the Sample Prayer Circle. Loves early-morning prayer and good coffee. (Sample profile)",
+    "coordinator@sample.test": "Prayer coordinator. Ask me about joining the prayer team. (Sample profile)",
+    "host@sample.test": "Hosts our weekly prayer line. (Sample profile)",
+    "member@sample.test": "University student, member of the Morning Intercessors. (Sample profile)",
+  };
+  for (const [email, bio] of Object.entries(bios)) await db.user.updateMany({ where: { email, bio: null }, data: { bio } });
 }
 
 main()

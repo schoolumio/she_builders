@@ -42,10 +42,15 @@ export default async function TestimoniesPage({ params, searchParams }: { params
         </div>
         <Card className="h-fit scroll-mt-24" id="share">
           <CardTitle>Share a testimony</CardTitle>
-          <ActionForm action={submitTestimonyAction.bind(null, slug)} className="mt-3" resetOnSuccess>
+          <ActionForm action={submitTestimonyAction.bind(null, slug)} className="mt-3" resetOnSuccess encType="multipart/form-data">
             {from && <input type="hidden" name="prayerRequestId" value={from} />}
             <TextField label="Title" name="title" required maxLength={160} />
             <TextAreaField label="Your testimony" name="body" required rows={6} />
+            <div className="space-y-1">
+              <label htmlFor="testimony-photo" className="text-sm font-medium">Add a photo (optional)</label>
+              <input id="testimony-photo" type="file" name="photo" accept="image/png,image/jpeg,image/webp" className="block w-full text-sm" />
+              <p className="text-xs text-muted">PNG, JPEG or WebP, up to 2 MB. Only share photos you have permission to share.</p>
+            </div>
             <SelectField label="Who can read it" name="audience" options={[{ value: "MEMBERS", label: "Members of this community" }, { value: "PUBLIC", label: "Anyone (public page)" }]} />
             <CheckboxField name="showName" label="Show my name" defaultChecked />
             <CheckboxField name="consent" label="I consent to this testimony being shared with the audience I chose." />

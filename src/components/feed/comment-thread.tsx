@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { MessageCircle } from "lucide-react";
 import { Avatar } from "@/components/ui/avatar";
 import { InlineAction } from "@/components/ui/inline-action";
@@ -26,7 +27,7 @@ export function CommentThread({ slug, kind, id, comments, viewer }: { slug: stri
                 <Avatar name={name} src={c.author.avatarUrl} size={36} />
                 <div className="min-w-0 flex-1">
                   <div className="rounded-2xl rounded-tl-sm bg-canvas px-4 py-2.5">
-                    <p className="text-sm font-semibold text-plum-900">{name}</p>
+                    <Link href={`/o/${slug}/members/${c.author.id}`} className="text-sm font-semibold text-plum-900 hover:underline">{name}</Link>
                     <p className="mt-0.5 whitespace-pre-line text-[0.95rem] leading-relaxed text-ink/85">{c.body}</p>
                   </div>
                   <div className="mt-1 flex items-center gap-3 px-2 text-xs text-muted">

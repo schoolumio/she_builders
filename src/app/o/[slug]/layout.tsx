@@ -17,7 +17,8 @@ export default async function OrgLayout({ children, params }: { children: React.
 
   const it = (href: string, label: string, icon: NavItem["icon"], exact?: boolean): NavItem => ({ href, label, icon, exact });
   const community: NavItem[] = [
-    it(base, "Home", "house", true),
+    it(base, "Feed", "house", true),
+    it(`${base}/members/${ctx.actor.id}`, "My profile", "users"),
     it(`${base}/meetings`, "Meetings", "calendar"),
     it(`${base}/prayer-points`, "Prayer points", "sparkles"),
     ...(ent.features.has("feature.prayer_requests") ? [it(`${base}/prayer`, "Prayer requests", "prayer")] : []),

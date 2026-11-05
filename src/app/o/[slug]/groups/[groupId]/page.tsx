@@ -4,6 +4,7 @@ import { DateTime } from "luxon";
 import { ArrowLeft, BookOpen, CalendarDays, HandHeart, Lock, Megaphone, Pin, Plus, Users } from "lucide-react";
 import { Card, Notice } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Avatar } from "@/components/ui/avatar";
 import { InlineAction } from "@/components/ui/inline-action";
 import { pageOrgContext } from "@/server/page";
 import { getGroupOverview } from "@/server/groups/overview";
@@ -158,8 +159,11 @@ export default async function GroupPage({ params }: { params: Promise<{ slug: st
               <Section icon={Users} title="Members">
                 <ul className="flex flex-wrap gap-2">
                   {members.map((m) => (
-                    <li key={m.id} className="rounded-full bg-violet-50 px-3 py-1 text-sm text-plum-900">
-                      {m.user.name}{m.role === "LEADER" && <span className="ml-1 text-xs font-semibold text-gold-600">Leader</span>}
+                    <li key={m.id}>
+                      <Link href={`/o/${slug}/members/${m.user.id}`} className="inline-flex items-center gap-2 rounded-full bg-violet-50 py-1 pl-1 pr-3 text-sm text-plum-900 hover:bg-violet-100">
+                        <Avatar name={m.user.name} src={m.user.avatarUrl} size={24} />
+                        {m.user.name}{m.role === "LEADER" && <span className="text-xs font-semibold text-gold-600">Leader</span>}
+                      </Link>
                     </li>
                   ))}
                 </ul>

@@ -17,13 +17,30 @@ import { acceptInvitation } from "@/server/members/service";
 import { SESSION_COOKIE } from "@/server/auth/session";
 import { verifyPassword } from "@/server/auth/password";
 import { ValidationError } from "@/server/errors";
+import { storePublicImage } from "@/server/storage";
 
 export async function updateProfileAction(_: ActionState, fd: FormData): Promise<ActionState> {
   return withUser(fd, async (user) => {
-    const d = parseInput(z.object({ name: nameSchema, displayName: z.string().trim().max(60).optional(), timezone: timezoneSchema }), formToObject(fd));
-    await db.user.update({ where: { id: user.id }, data: { name: d.name, displayName: d.displayName || null, timezone: d.timezone } });
+    const d = parseInput(z.object({ name: nameSchema, displayName: z.string().trim().max(60).optional(), bio: z.string().trim().max(300).optional(), timezone: timezoneSchema }), formToObject(fd));
+    await db.user.update({ where: { id: user.id }, data: { name: d.name, displayName: d.displayName || null, bio: d.bio || null, timezone: d.timezone } });
     revalidatePath("/app", "layout");
     return { ok: true, message: "Profile saved." };
+  });
+}
+
+/** Profile photo: uploaded (checked by content, 2 MB max) or removed with op=remove. */
+export async function profilePhotoAction(_: ActionState, fd: FormData): Promise<ActionState> {
+  return withUser(fd, async (user) => {
+    if (str(fd, "op") === "remove") {
+      await db.user.update({ where: { id: user.id }, data: { avatarUrl: null } });
+    } else {
+      const file = fd.get("photo");
+      if (!(file instanceof File) || file.size === 0) throw new ValidationError("Choose a photo.");
+      const url = await storePublicImage(file, `users/${user.id}`);
+      await db.user.update({ where: { id: user.id }, data: { avatarUrl: url } });
+    }
+    revalidatePath("/", "layout");
+    return { ok: true, message: str(fd, "op") === "remove" ? "Photo removed." : "Photo updated." };
   });
 }
 

@@ -4,13 +4,13 @@ import { ArrowLeft } from "lucide-react";
 import { Card, Notice } from "@/components/ui/card";
 import { Avatar } from "@/components/ui/avatar";
 import { CommentThread } from "@/components/feed/comment-thread";
-import { ReactionButton } from "@/components/feed/reaction-button";
+import { ReactionPicker } from "@/components/feed/reaction-picker";
 import { timeAgo } from "@/components/feed/post-card";
 import { pageOrgContext } from "@/server/page";
 import { getCurrentUser } from "@/server/auth/current-user";
 import { getTestimony, listComments } from "@/server/social/service";
 import { NotFoundError } from "@/server/errors";
-import { amenAction } from "../../actions";
+import { reactAction } from "../../actions";
 
 export const metadata = { title: "Testimony" };
 
@@ -22,7 +22,7 @@ export default async function TestimonyPage({ params }: { params: Promise<{ slug
     if (e instanceof NotFoundError) notFound();
     throw e;
   });
-  const { testimony: t } = data;
+  const { testimony: t, reactions } = data;
   const comments = await listComments(ctx, { kind: "testimony", id: t.id });
   const name = t.author.id ? (t.author.displayName ?? t.author.name) : "A member";
 
@@ -37,16 +37,20 @@ export default async function TestimonyPage({ params }: { params: Promise<{ slug
           <div className="flex items-center gap-3">
             <Avatar name={name} src={t.author.avatarUrl} size={48} />
             <div>
-              <p className="font-semibold text-plum-900">{name}</p>
+              {t.author.id && t.showName ? <Link href={`/o/${slug}/members/${t.author.id}`} className="font-semibold text-plum-900 hover:underline">{name}</Link> : <p className="font-semibold text-plum-900">{name}</p>}
               <p className="text-xs text-muted">Testimony · {timeAgo(t.publishedAt ?? t.createdAt)}</p>
             </div>
           </div>
           <h1 className="mt-5 font-serif text-3xl font-semibold leading-tight text-plum-900">{t.title}</h1>
           <p className="mt-3 whitespace-pre-line text-[1.02rem] leading-relaxed text-ink/90">{t.body}</p>
         </div>
+        {t.imageUrl && (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={t.imageUrl} alt="" className="max-h-[40rem] w-full bg-canvas object-contain" />
+        )}
         {t.moderationStatus === "APPROVED" && (
           <footer className="border-t border-line/70 px-3 py-2">
-            <ReactionButton action={amenAction.bind(null, slug)} id={t.id} kind="amen" active={t.reactions.length > 0} count={t._count.reactions} />
+            <ReactionPicker action={reactAction.bind(null, slug)} id={t.id} summary={reactions} />
           </footer>
         )}
       </article>
