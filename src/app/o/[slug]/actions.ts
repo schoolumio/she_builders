@@ -13,6 +13,7 @@ import { leaveOrganization } from "@/server/members/service";
 import { recordJoinIntent } from "@/server/meetings/service";
 import { safeExternalUrl } from "@/lib/urls";
 import { ValidationError } from "@/server/errors";
+import { addComment, deleteComment, toggleAmen, type PostTarget } from "@/server/social/service";
 
 export async function createPrayerRequestAction(slug: string, _: ActionState, fd: FormData): Promise<ActionState> {
   let id = "";
@@ -110,4 +111,42 @@ export async function joinWhatsAppAction(slug: string, _: ActionState, fd: FormD
   });
   if (res?.ok && url) redirect(url);
   return res;
+}
+
+function postTarget(fd: FormData): PostTarget {
+  const kind = str(fd, "kind");
+  if (kind !== "prayer" && kind !== "testimony") throw new ValidationError("Unknown post.");
+  return { kind, id: str(fd, "id") };
+}
+
+export async function addCommentAction(slug: string, _: ActionState, fd: FormData): Promise<ActionState> {
+  return withOrg(slug, fd, async (ctx) => {
+    await addComment(ctx, postTarget(fd), formToObject(fd));
+    revalidatePath(`/o/${slug}`, "layout");
+    return { ok: true, message: "Encouragement posted." };
+  });
+}
+
+export async function deleteCommentAction(slug: string, _: ActionState, fd: FormData): Promise<ActionState> {
+  return withOrg(slug, fd, async (ctx) => {
+    await deleteComment(ctx, str(fd, "commentId"));
+    revalidatePath(`/o/${slug}`, "layout");
+    return { ok: true };
+  });
+}
+
+export async function amenAction(slug: string, _: ActionState, fd: FormData): Promise<ActionState> {
+  return withOrg(slug, fd, async (ctx) => {
+    await toggleAmen(ctx, str(fd, "id"));
+    revalidatePath(`/o/${slug}`, "layout");
+    return { ok: true };
+  });
+}
+
+export async function prayForAction(slug: string, _: ActionState, fd: FormData): Promise<ActionState> {
+  return withOrg(slug, fd, async (ctx) => {
+    await acknowledgePrayer(ctx, str(fd, "id"));
+    revalidatePath(`/o/${slug}`, "layout");
+    return { ok: true };
+  });
 }

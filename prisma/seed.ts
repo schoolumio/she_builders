@@ -25,6 +25,7 @@ async function main() {
   if (await db.organization.findUnique({ where: { slug: "sample-prayer-circle" } })) {
     console.log("• Sample data already present");
     await seedSampleGroupContent();
+    await seedSampleSocial();
     return;
   }
 
@@ -111,6 +112,7 @@ async function main() {
     },
   });
   await seedSampleGroupContent();
+  await seedSampleSocial();
   console.log("✓ Sample organisation created: /o/sample-prayer-circle");
   console.log(`  Sample logins (password ${password}): owner@, coordinator@, finance@, host@, member@ sample.test`);
   console.log("  Run `npm run cron:tick` to generate meeting occurrences.");
@@ -158,6 +160,41 @@ async function seedSampleGroupContent() {
     data: { organizationId: org.id, authorId: member.id, title: "Job interview on Friday (sample)", body: "Please pray for calm and favour. Sample request shared only with the Morning Intercessors.", visibility: "GROUP", groupId: group.id },
   });
   console.log("✓ Sample group content added (meeting, announcement, prayer request)");
+}
+
+/** Sample posts, prayers, encouragements and amens so the community feed has life. Idempotent. */
+async function seedSampleSocial() {
+  const org = await db.organization.findUnique({ where: { slug: "sample-prayer-circle" } });
+  if (!org) return;
+  if (await db.testimony.findFirst({ where: { organizationId: org.id } })) return;
+  const user = (email: string) => db.user.findUniqueOrThrow({ where: { email } });
+  const [owner, coordinator, host, member] = await Promise.all([user("owner@sample.test"), user("coordinator@sample.test"), user("host@sample.test"), user("member@sample.test")]);
+  const ago = (hours: number) => new Date(Date.now() - hours * 3600_000);
+
+  const exams = await db.prayerRequest.create({
+    data: { organizationId: org.id, authorId: member.id, title: "Final exams next week (sample)", body: "Please pray for focus, calm and good recall during my final exams. Sample post.", visibility: "ORGANIZATION", createdAt: ago(3) },
+  });
+  const mother = await db.prayerRequest.create({
+    data: { organizationId: org.id, authorId: host.id, title: "My mother's recovery (sample)", body: "She had surgery on Monday and is recovering. Praying for full healing and strength. Sample post.", visibility: "ORGANIZATION", status: "ANSWERED", answeredAt: ago(1), createdAt: ago(30) },
+  });
+  const job = await db.testimony.create({
+    data: {
+      organizationId: org.id, authorId: coordinator.id, title: "God provided a job (sample)",
+      body: "After eight months of searching I received an offer this week. Thank you all for standing with me in prayer. Sample testimony.",
+      audience: "MEMBERS", showName: true, consentGivenAt: new Date(), moderationStatus: "APPROVED", publishedAt: ago(6), createdAt: ago(6),
+    },
+  });
+  await db.prayerAcknowledgement.createMany({ data: [owner, coordinator, host].map((u) => ({ requestId: exams.id, userId: u.id })) });
+  await db.prayerAcknowledgement.createMany({ data: [owner, coordinator, member].map((u) => ({ requestId: mother.id, userId: u.id })) });
+  await db.testimonyReaction.createMany({ data: [owner, host, member].map((u) => ({ testimonyId: job.id, userId: u.id })) });
+  await db.postComment.createMany({
+    data: [
+      { organizationId: org.id, authorId: coordinator.id, prayerRequestId: exams.id, body: "Praying for you! Philippians 4:6-7.", createdAt: ago(2) },
+      { organizationId: org.id, authorId: owner.id, prayerRequestId: mother.id, body: "Glory to God for her recovery!", createdAt: ago(1) },
+      { organizationId: org.id, authorId: member.id, testimonyId: job.id, body: "Amen! So happy for you.", createdAt: ago(5) },
+    ],
+  });
+  console.log("✓ Sample feed content added (prayer requests, testimony, encouragements)");
 }
 
 main()

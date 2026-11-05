@@ -11,6 +11,8 @@ import { getPrayerRequest } from "@/server/prayer/service";
 import { prayerAuthorLabel, VISIBILITY_EXPLANATION } from "@/server/prayer/access";
 import { NotFoundError } from "@/server/errors";
 import { formatInZone } from "@/lib/time";
+import { listComments } from "@/server/social/service";
+import { CommentThread } from "@/components/feed/comment-thread";
 import { acknowledgePrayerAction, deletePrayerAction, updatePrayerAction } from "../../actions";
 
 export default async function PrayerRequestPage({ params, searchParams }: { params: Promise<{ slug: string; id: string }>; searchParams: Promise<{ created?: string }> }) {
@@ -23,6 +25,7 @@ export default async function PrayerRequestPage({ params, searchParams }: { para
     throw e;
   });
   const { request: r, isAuthor, canModerate, canAssign } = data;
+  const comments = await listComments(ctx, { kind: "prayer", id: r.id });
   return (
     <>
       <PageHeader eyebrow="Prayer request" title={r.title} description={`${prayerAuthorLabel(r, r.author.name, user.id)} · ${formatInZone(r.createdAt, user.timezone)}`} />
@@ -60,6 +63,9 @@ export default async function PrayerRequestPage({ params, searchParams }: { para
               </ul>
             </Card>
           )}
+          <Card>
+            <CommentThread slug={slug} kind="prayer" id={r.id} comments={comments} viewer={{ name: user.displayName ?? user.name, avatarUrl: user.avatarUrl }} />
+          </Card>
           {isAuthor && (
             <Card>
               <CardTitle>Update your request</CardTitle>

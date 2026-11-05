@@ -1,3 +1,4 @@
+import Link from "next/link";
 import { Card, CardTitle, EmptyState, PageHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ActionForm, CheckboxField, SelectField, SubmitButton, TextAreaField, TextField } from "@/components/ui/form";
@@ -25,7 +26,7 @@ export default async function TestimoniesPage({ params, searchParams }: { params
           {rows.map((t) => (
             <Card key={t.id}>
               <div className="flex flex-wrap items-center gap-2">
-                <p className="font-semibold text-plum-900">{t.title}</p>
+                <Link href={`/o/${slug}/testimonies/${t.id}`} className="font-semibold text-plum-900 hover:underline">{t.title}</Link>
                 {t.moderationStatus === "PENDING" && <Badge tone="warning">Awaiting review</Badge>}
                 {t.audience === "PUBLIC" && <Badge tone="gold">Public</Badge>}
               </div>
@@ -39,7 +40,7 @@ export default async function TestimoniesPage({ params, searchParams }: { params
             </Card>
           ))}
         </div>
-        <Card className="h-fit">
+        <Card className="h-fit scroll-mt-24" id="share">
           <CardTitle>Share a testimony</CardTitle>
           <ActionForm action={submitTestimonyAction.bind(null, slug)} className="mt-3" resetOnSuccess>
             {from && <input type="hidden" name="prayerRequestId" value={from} />}

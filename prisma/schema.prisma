@@ -61,6 +61,8 @@ model User {
   prayerRequests         PrayerRequest[]
   prayerAssignments      PrayerRequestAssignment[]
   prayerAcknowledgements PrayerAcknowledgement[]
+  postComments           PostComment[]
+  testimonyReactions     TestimonyReaction[]
   prayerUpdates          PrayerRequestUpdate[]
   testimonies            Testimony[]
   notifications          Notification[]
@@ -194,6 +196,7 @@ model Organization {
   prayerPoints       PrayerPoint[]
   prayerRequests     PrayerRequest[]
   testimonies        Testimony[]
+  postComments       PostComment[]
   programmes         Programme[]
   notifications      Notification[]
   campaigns          FundraisingCampaign[]
@@ -658,6 +661,7 @@ model PrayerRequest {
   assignments     PrayerRequestAssignment[]
   acknowledgements PrayerAcknowledgement[]
   updates         PrayerRequestUpdate[]
+  comments        PostComment[]
 
   @@index([organizationId, visibility, moderationStatus, createdAt])
   @@index([authorId])
@@ -726,12 +730,16 @@ model Testimony {
   createdAt        DateTime          @default(now())
   updatedAt        DateTime          @updatedAt
 
+  comments  PostComment[]
+  reactions TestimonyReaction[]
+
   @@index([organizationId, moderationStatus])
 }
 
 enum ReportTarget {
   PRAYER_REQUEST
   TESTIMONY
+  COMMENT
   ANNOUNCEMENT
   MEMBER
   MEETING
@@ -1503,4 +1511,35 @@ model StoredFile {
   body        Bytes
   size        Int
   createdAt   DateTime @default(now())
+}
+
+/// An encouragement left on a prayer request or a testimony. Readable by exactly the people who can
+/// read the post it belongs to (see src/server/social/service.ts).
+model PostComment {
+  id              String         @id @default(cuid())
+  organizationId  String
+  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  authorId        String
+  author          User           @relation(fields: [authorId], references: [id], onDelete: Cascade)
+  prayerRequestId String?
+  prayerRequest   PrayerRequest? @relation(fields: [prayerRequestId], references: [id], onDelete: Cascade)
+  testimonyId     String?
+  testimony       Testimony?     @relation(fields: [testimonyId], references: [id], onDelete: Cascade)
+  body            String
+  createdAt       DateTime       @default(now())
+
+  @@index([prayerRequestId, createdAt])
+  @@index([testimonyId, createdAt])
+}
+
+/// "Amen" on a testimony — one per member.
+model TestimonyReaction {
+  id          String    @id @default(cuid())
+  testimonyId String
+  testimony   Testimony @relation(fields: [testimonyId], references: [id], onDelete: Cascade)
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt   DateTime  @default(now())
+
+  @@unique([testimonyId, userId])
 }
