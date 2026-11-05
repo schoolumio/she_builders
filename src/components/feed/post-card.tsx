@@ -121,7 +121,7 @@ export function PostCard({ item, slug, meId }: { item: FeedItem; slug: string; m
         />
         {item.theme && <p className="mt-3 text-[0.95rem] text-ink/85">{item.theme}</p>}
         <div className="mt-3 rounded-xl bg-canvas px-4 py-3">
-          <AvatarStack people={item.joined} verb={["prayed together", "prayed together"]} meId={meId} />
+          <AvatarStack people={item.joined} total={item.joinedCount} verb={["prayed", "prayed together"]} meId={meId} />
         </div>
         <Link href={`/o/${slug}/meetings/${item.id}`} className="mt-3 inline-block text-sm font-semibold text-plum-700 hover:underline">See the session</Link>
       </Shell>

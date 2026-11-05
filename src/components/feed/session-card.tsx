@@ -49,8 +49,8 @@ export function SessionCard({ s, slug, tz, meId }: { s: Session; slug: string; t
         </Link>
 
         <div className="mt-4 space-y-2">
-          {live && (s.joined.length ? <AvatarStack people={s.joined} verb={["is praying", "are praying"]} onDark meId={meId} /> : <p className="text-sm text-white/70">Be the first to join.</p>)}
-          {!live && s.interested.length > 0 && <AvatarStack people={s.interested} verb={["is interested", "are interested"]} meId={meId} />}
+          {live && (s.joinedCount ? <AvatarStack people={s.joined} total={s.joinedCount} verb={["is praying", "are praying"]} onDark meId={meId} /> : <p className="text-sm text-white/70">Be the first to join.</p>)}
+          {!live && s.interestedCount > 0 && <AvatarStack people={s.interested} total={s.interestedCount} verb={["is interested", "are interested"]} meId={meId} />}
         </div>
 
         <div className="mt-5 flex flex-wrap items-center gap-2">

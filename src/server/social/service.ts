@@ -173,10 +173,32 @@ export type SessionCard = {
   startsAt: Date;
   endsAt: Date;
   state: "live" | "soon" | "upcoming";
+  /** When true, `joined` and `interested` are always empty: only the counts may be shown. */
+  attendancePrivate: boolean;
   joined: Person[];
+  joinedCount: number;
   interested: Person[];
+  interestedCount: number;
   iAmInterested: boolean;
 };
+
+/** Exact number of distinct active members who joined each session (any join source). */
+async function participantCounts(occurrenceIds: string[]): Promise<Map<string, number>> {
+  if (!occurrenceIds.length) return new Map();
+  const rows = await db.$queryRaw<{ occurrenceId: string; n: number }[]>`
+    SELECT p."occurrenceId", COUNT(DISTINCT p."userId")::int AS n
+    FROM (
+      SELECT "occurrenceId", "userId" FROM "MeetingAttendance" WHERE "occurrenceId" = ANY(${occurrenceIds})
+      UNION
+      SELECT "occurrenceId", "userId" FROM "MeetingJoinIntent" WHERE "occurrenceId" = ANY(${occurrenceIds})
+    ) p
+    JOIN "User" u ON u.id = p."userId" AND u.status = 'ACTIVE'
+    GROUP BY p."occurrenceId"`;
+  return new Map(rows.map((r) => [r.occurrenceId, Number(r.n)]));
+}
+
+/** Faces are shown only for sessions whose attendance is not private. */
+const showPeople = (attendancePrivate: boolean, people: Person[]) => (attendancePrivate ? [] : people.slice(0, 12));
 
 /**
  * Sessions to surface at the top of the feed: those running now, then those starting within the
@@ -188,18 +210,25 @@ export async function getSessionHighlights(ctx: OrgContext, take = 4): Promise<S
   const rows = await db.meetingOccurrence.findMany({
     where: { AND: [visibleOccurrenceWhere(ctx, facts), { endsAt: { gte: now }, status: { in: ["SCHEDULED", "LIVE"] }, meeting: { status: "ACTIVE" }, startsAt: { lte: new Date(now.getTime() + 7 * 86400_000) } }] },
     include: {
-      meeting: { select: { title: true, theme: true, mode: true } },
+      meeting: { select: { title: true, theme: true, mode: true, attendancePrivate: true } },
       attendances: { select: { user: { select: personSelect } }, take: 50 },
       joinIntents: { select: { user: { select: personSelect } }, orderBy: { createdAt: "desc" }, take: 100 },
-      interests: { select: { user: { select: personSelect } }, orderBy: { createdAt: "desc" }, take: 50 },
+      interests: { where: { user: { status: "ACTIVE" } }, select: { user: { select: personSelect } }, orderBy: { createdAt: "desc" }, take: 50 },
+      _count: { select: { interests: { where: { user: { status: "ACTIVE" } } } } },
     },
     orderBy: { startsAt: "asc" },
     take,
   });
+  const ids = rows.map((o) => o.id);
+  const [counts, mine] = await Promise.all([
+    participantCounts(ids),
+    db.sessionInterest.findMany({ where: { occurrenceId: { in: ids }, userId: ctx.actor.id }, select: { occurrenceId: true } }),
+  ]);
+  const mineSet = new Set(mine.map((m) => m.occurrenceId));
   return rows.map((o) => {
     const live = o.status === "LIVE" || o.startsAt <= now;
     const soon = !live && o.startsAt.getTime() - now.getTime() <= SOON_MINUTES * 60_000;
-    const interested = o.interests.map((i) => i.user).filter((u) => u.status === "ACTIVE");
+    const priv = o.meeting.attendancePrivate;
     return {
       id: o.id,
       title: o.meeting.title,
@@ -208,9 +237,12 @@ export async function getSessionHighlights(ctx: OrgContext, take = 4): Promise<S
       startsAt: o.startsAt,
       endsAt: o.endsAt,
       state: live ? "live" : soon ? "soon" : "upcoming",
-      joined: live ? participants(o) : [],
-      interested,
-      iAmInterested: interested.some((u) => u.id === ctx.actor.id),
+      attendancePrivate: priv,
+      joined: live ? showPeople(priv, participants(o)) : [],
+      joinedCount: live ? (counts.get(o.id) ?? 0) : 0,
+      interested: showPeople(priv, o.interests.map((i) => i.user)),
+      interestedCount: o._count.interests,
+      iAmInterested: mineSet.has(o.id),
     } satisfies SessionCard;
   });
 }
@@ -256,7 +288,7 @@ export type FeedItem =
       comments: number;
     }
   | { kind: "testimony"; id: string; at: Date; title: string; body: string; imageUrl: string | null; author: Author; showName: boolean; reactions: ReactionSummary; comments: number }
-  | { kind: "session"; id: string; at: Date; title: string; theme: string | null; mode: MeetingMode; startsAt: Date; joined: Person[] }
+  | { kind: "session"; id: string; at: Date; title: string; theme: string | null; mode: MeetingMode; startsAt: Date; attendancePrivate: boolean; joined: Person[]; joinedCount: number }
   | { kind: "announcement"; id: string; at: Date; title: string; body: string; pinned: boolean; groupName: string | null }
   | { kind: "prayerPoint"; id: string; at: Date; title: string; body: string; scriptureRefs: string[] };
 
@@ -321,7 +353,7 @@ export async function getFeed(ctx: OrgContext, opts: { before?: Date; filter?: F
               ],
             },
             include: {
-              meeting: { select: { title: true, theme: true, mode: true } },
+              meeting: { select: { title: true, theme: true, mode: true, attendancePrivate: true } },
               attendances: { select: { user: { select: personSelect } }, take: 50 },
               joinIntents: { select: { user: { select: personSelect } }, take: 100 },
             },
@@ -345,7 +377,7 @@ export async function getFeed(ctx: OrgContext, opts: { before?: Date; filter?: F
       : [],
   ]);
 
-  const reactions = await reactionSummaries(testimonies.map((t) => t.id), me);
+  const [reactions, sessionCounts] = await Promise.all([reactionSummaries(testimonies.map((t) => t.id), me), participantCounts(sessions.map((o) => o.id))]);
   const items: FeedItem[] = [
     ...prayers.map((p): FeedItem => ({
       kind: "prayer",
@@ -373,7 +405,18 @@ export async function getFeed(ctx: OrgContext, opts: { before?: Date; filter?: F
       reactions: reactions.get(t.id)!,
       comments: t._count.comments,
     })),
-    ...sessions.map((o): FeedItem => ({ kind: "session", id: o.id, at: o.endsAt, title: o.meeting.title, theme: o.meeting.theme, mode: o.meeting.mode, startsAt: o.startsAt, joined: participants(o) })),
+    ...sessions.map((o): FeedItem => ({
+      kind: "session",
+      id: o.id,
+      at: o.endsAt,
+      title: o.meeting.title,
+      theme: o.meeting.theme,
+      mode: o.meeting.mode,
+      startsAt: o.startsAt,
+      attendancePrivate: o.meeting.attendancePrivate,
+      joined: showPeople(o.meeting.attendancePrivate, participants(o)),
+      joinedCount: sessionCounts.get(o.id) ?? 0,
+    })),
     ...announcements.map((a): FeedItem => ({ kind: "announcement", id: a.id, at: a.publishedAt ?? a.createdAt, title: a.title, body: a.body, pinned: a.pinned, groupName: a.group?.name ?? null })),
     ...points.map((p): FeedItem => ({ kind: "prayerPoint", id: p.id, at: p.publishedAt ?? p.createdAt, title: p.title, body: p.body, scriptureRefs: p.scriptureRefs })),
   ].sort((a, b) => b.at.getTime() - a.at.getTime());

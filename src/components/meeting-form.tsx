@@ -18,6 +18,7 @@ type Defaults = {
   externalUrl?: string | null;
   externalInstructions?: string | null;
   waitingRoom?: boolean;
+  attendancePrivate?: boolean;
   chatEnabled?: boolean;
   giftsEnabled?: boolean;
   timezone?: string;
@@ -161,6 +162,12 @@ export function MeetingForm({
           { value: "INVITED", label: "Only invited members" },
           { value: "PUBLIC", label: "Listed publicly (joining still requires membership)" },
         ]}
+      />
+      <CheckboxField
+        name="attendancePrivate"
+        label="Keep attendance private"
+        hint="The feed shows only how many people joined or are interested (for example “14 people are praying”), never names or photos."
+        defaultChecked={defaults.attendancePrivate ?? false}
       />
       {visibility === "GROUP" && <SelectField label="Group" name="groupId" defaultValue={defaults.groupId ?? groups[0]?.id} options={groups.map((g) => ({ value: g.id, label: g.name }))} />}
 

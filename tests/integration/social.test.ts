@@ -229,3 +229,38 @@ describe("member profiles", () => {
     await expect(getMemberProfile(await ctxFor(s.other, s.org), s.author.id)).rejects.toBeInstanceOf(NotFoundError);
   });
 });
+
+describe("private attendance", () => {
+  it("sends only counts, never people, for sessions marked private", async () => {
+    const s = await setup();
+    const octx = await ctxFor(s.owner, s.org);
+    const live = await occurrenceOf((await createMeeting(octx, meeting({ title: "Private live", attendancePrivate: "on" }))).id);
+    await db.meetingOccurrence.update({ where: { id: live.id }, data: { startsAt: new Date(Date.now() - 600_000), endsAt: new Date(Date.now() + 3_000_000) } });
+    await recordJoinIntent(await ctxFor(s.author, s.org), live.id);
+    await recordJoinIntent(await ctxFor(s.groupMate, s.org), live.id);
+    const later = await occurrenceOf((await createMeeting(octx, meeting({ title: "Private later", attendancePrivate: "on" }))).id);
+    await toggleSessionInterest(await ctxFor(s.author, s.org), later.id);
+    await toggleSessionInterest(await ctxFor(s.other, s.org), later.id);
+
+    const cards = await getSessionHighlights(await ctxFor(s.other, s.org));
+    const l = cards.find((c) => c.title === "Private live")!;
+    expect(l).toMatchObject({ attendancePrivate: true, joined: [], joinedCount: 2 });
+    const u = cards.find((c) => c.title === "Private later")!;
+    expect(u).toMatchObject({ attendancePrivate: true, interested: [], interestedCount: 2, iAmInterested: true });
+
+    await db.meetingOccurrence.update({ where: { id: live.id }, data: { endsAt: new Date(Date.now() - 1000) } });
+    const item = (await getFeed(await ctxFor(s.other, s.org), { filter: "sessions" })).items[0]!;
+    expect(item).toMatchObject({ kind: "session", attendancePrivate: true, joined: [], joinedCount: 2 });
+  });
+
+  it("still shows faces for ordinary sessions, with exact totals", async () => {
+    const s = await setup();
+    const live = await occurrenceOf((await createMeeting(await ctxFor(s.owner, s.org), meeting({ title: "Open" }))).id);
+    await db.meetingOccurrence.update({ where: { id: live.id }, data: { startsAt: new Date(Date.now() - 600_000), endsAt: new Date(Date.now() + 3_000_000) } });
+    for (const u of [s.author, s.groupMate, s.coordinator]) await recordJoinIntent(await ctxFor(u, s.org), live.id);
+    const c = (await getSessionHighlights(await ctxFor(s.other, s.org)))[0]!;
+    expect(c.attendancePrivate).toBe(false);
+    expect(c.joinedCount).toBe(3);
+    expect(c.joined.map((p) => p.id).sort()).toEqual([s.author.id, s.groupMate.id, s.coordinator.id].sort());
+  });
+});

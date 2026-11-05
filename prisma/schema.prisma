@@ -366,6 +366,8 @@ model Meeting {
   externalInstructions String?
   // In-app room settings
   waitingRoom       Boolean             @default(false)
+  // When true, the feed shows how many people joined or are interested, never who.
+  attendancePrivate Boolean             @default(false)
   chatEnabled       Boolean             @default(true)
   giftsEnabled      Boolean             @default(true)
   maxParticipants   Int?
